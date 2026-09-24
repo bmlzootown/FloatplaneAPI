@@ -212,8 +212,16 @@ export async function processOneObservation(opts) {
 
     if (!opts.dryRun) {
       if (compareFailed) {
+        // Durability boundary: keep extract status from disk (complete); mark compare failed.
+        const afterExtract = await buildProcessingRecord({
+          observationDir: observation.observationDir,
+          observationId: observation.observationId,
+          buildId: observation.buildId,
+          previousObservationId: observation.previousObservationId,
+          now,
+        });
         record = {
-          ...record,
+          ...afterExtract,
           comparison: {
             status: COMPARISON_STATUS.FAILED,
             fromObservationId: observation.previousObservationId,
@@ -225,6 +233,9 @@ export async function processOneObservation(opts) {
           },
           updatedAt: now.toISOString(),
         };
+        notes.push(
+          'durability_boundary: extract retained; comparison failed — next run retries compare only',
+        );
       } else {
         record = await buildProcessingRecord({
           observationDir: observation.observationDir,

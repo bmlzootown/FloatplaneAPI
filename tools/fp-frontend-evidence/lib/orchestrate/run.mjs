@@ -133,25 +133,25 @@ export async function runPhase2Backlog(opts) {
   ].filter(Boolean);
 
   const indexRel = path.posix.join('artifacts/frontend', PROCESSING_INDEX_FILE);
+  // Commit extract (and index) when compare failed after successful extract (durability boundary).
+  const indexPath =
+    results.some((r) => r.didExtract || r.didCompare || r.compareFailed || r.extractFailed)
+      ? indexRel
+      : null;
+
   const commitPlan = buildCommitSequence({
     phase1Append,
     phase1CommitMessage: phase1?.commitMessage || null,
     phase1Paths,
     phase2Results: results,
-    indexPath: results.some((r) => r.didExtract || r.didCompare)
-      ? indexRel
-      : // Still refresh index when we wrote processing markers
-        refreshed.records.length
-        ? indexRel
-        : null,
+    indexPath,
   });
 
-  // If we only refreshed processing.json / index with no extract/compare,
-  // still allow a lightweight index commit when status changed from absent.
   const phase2CommitCount = commitPlan.commits.filter(
     (c) => c.phase === 'phase2',
   ).length;
 
+  // Partial extract success still counts as Phase 2 work for PR / main-backfill decisions.
   const phase2OnMainOnly =
     !opts.hasUniquePendingPhase1 &&
     results.some((r) => r.didExtract || r.didCompare) &&

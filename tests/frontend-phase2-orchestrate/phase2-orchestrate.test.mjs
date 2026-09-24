@@ -27,10 +27,11 @@ import {
   writeProcessingRecord,
   writeProcessingIndex,
   inspectExtractArtifacts,
+  readOrDeriveProcessing,
+  validateProcessingConsistency,
 } from '../../tools/fp-frontend-evidence/lib/orchestrate/status.mjs';
 import {
   buildBacklog,
-  listAllObservations,
   orderByLineage,
   scanProcessingRecords,
 } from '../../tools/fp-frontend-evidence/lib/orchestrate/backlog.mjs';
@@ -41,14 +42,16 @@ import {
   decidePhase2PushRace,
   decidePhase2PrAction,
   classifyPhase2Commit,
+  classifyMonitoringPathDiffs,
+  isPhase2OwnedPath,
 } from '../../tools/fp-frontend-evidence/lib/orchestrate/decision.mjs';
 import {
   formatAnalysisPrSection,
-  buildObservationAnalyses,
 } from '../../tools/fp-frontend-evidence/lib/orchestrate/pr-analysis.mjs';
 import { formatObservationPrBody } from '../../tools/fp-frontend-watch/lib/monitor-pr-body.mjs';
 import { runEvidenceDiff } from '../../tools/fp-frontend-evidence/lib/diff/run-diff.mjs';
 import { PR_BODY_MARKERS } from '../../tools/fp-frontend-watch/lib/monitor-constants.mjs';
+import { assessPendingLedger } from '../../tools/fp-frontend-watch/lib/monitor-decision.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TMP = path.join(__dirname, '.tmp-phase2-orch');
@@ -632,5 +635,327 @@ describe('Phase 2.3 orchestration — offline cases 1–15', () => {
       records: [result.record, refreshed.byId.get(OBS_A)],
     });
     assert.ok(await exists(path.join(root, PROCESSING_INDEX_FILE)));
+  });
+});
+
+describe('Phase 2.3.1 hardening — regression cases 1–8', () => {
+  it('1. extract ok + compare fail → evidence retained; extract-only commit', async () => {
+    assert.equal(COMMIT_STRATEGY.extractDurableIndependentOfCompare, true);
+    const root = path.join(TMP, 'h1');
+    await writeObs({
+      artifactsRoot: root,
+      observationId: OBS_A,
+      buildId: 'b1',
+      previousObservationId: null,
+      evidence: makeEvidenceDoc({
+        observationId: OBS_A,
+        items: [structuredOp({ method: 'GET', path: '/api/v3/a' })],
+      }),
+    });
+    await writeObs({
+      artifactsRoot: root,
+      observationId: OBS_B,
+      buildId: 'b2',
+      previousObservationId: OBS_A,
+      evidence: makeEvidenceDoc({
+        observationId: OBS_B,
+        items: [
+          structuredOp({ method: 'GET', path: '/api/v3/a' }),
+          structuredOp({ method: 'POST', path: '/api/v3/b' }),
+        ],
+      }),
+    });
+
+    // Simulate extract succeeded then compare failed in same run.
+    const obsDir = path.join(root, 'b2', OBS_B);
+    const afterExtract = await buildProcessingRecord({
+      observationDir: obsDir,
+      observationId: OBS_B,
+      buildId: 'b2',
+      previousObservationId: OBS_A,
+    });
+    assert.equal(afterExtract.extract.status, EXTRACT_STATUS.COMPLETE);
+    const failed = {
+      ...afterExtract,
+      comparison: {
+        status: COMPARISON_STATUS.FAILED,
+        fromObservationId: OBS_A,
+        comparisonStatus: null,
+        diffRelPath: null,
+        comparedAt: null,
+        error: 'simulated compare failure',
+        summaryCounts: null,
+      },
+    };
+    await writeProcessingRecord(obsDir, failed);
+
+    // Evidence still on disk
+    assert.ok(await exists(path.join(obsDir, 'phase2', 'api-evidence.json')));
+    assert.ok(await exists(path.join(obsDir, 'phase2', 'status.json')));
+
+    const plan = buildCommitSequence({
+      phase1Append: false,
+      phase1CommitMessage: null,
+      phase1Paths: [],
+      phase2Results: [
+        {
+          didExtract: true,
+          didCompare: false,
+          compareFailed: true,
+          buildId: 'b2',
+          observationId: OBS_B,
+          touchedRelPaths: [
+            `artifacts/frontend/b2/${OBS_B}/phase2`,
+          ],
+        },
+      ],
+      indexPath: `artifacts/frontend/${PROCESSING_INDEX_FILE}`,
+    });
+    assert.equal(plan.extractDurableDespiteCompareFailure, true);
+    assert.equal(plan.commits.length, 1);
+    assert.equal(plan.commits[0].step, 'extract');
+    assert.match(plan.commits[0].durabilityBoundary, /compare_failed/);
+  });
+
+  it('2. next run retries compare only (no re-extract)', async () => {
+    const root = path.join(TMP, 'h2');
+    await writeObs({
+      artifactsRoot: root,
+      observationId: OBS_A,
+      buildId: 'b1',
+      previousObservationId: null,
+      evidence: makeEvidenceDoc({
+        observationId: OBS_A,
+        items: [structuredOp({ method: 'GET', path: '/api/v3/a' })],
+      }),
+    });
+    await writeObs({
+      artifactsRoot: root,
+      observationId: OBS_B,
+      buildId: 'b2',
+      previousObservationId: OBS_A,
+      evidence: makeEvidenceDoc({
+        observationId: OBS_B,
+        items: [
+          structuredOp({ method: 'GET', path: '/api/v3/a' }),
+          structuredOp({ method: 'POST', path: '/api/v3/b' }),
+        ],
+      }),
+    });
+    const obsDir = path.join(root, 'b2', OBS_B);
+    const base = await buildProcessingRecord({
+      observationDir: obsDir,
+      observationId: OBS_B,
+      buildId: 'b2',
+      previousObservationId: OBS_A,
+    });
+    await writeProcessingRecord(obsDir, {
+      ...base,
+      comparison: {
+        status: COMPARISON_STATUS.FAILED,
+        fromObservationId: OBS_A,
+        comparisonStatus: null,
+        diffRelPath: null,
+        comparedAt: null,
+        error: 'prior failure',
+        summaryCounts: null,
+      },
+    });
+
+    const { records, byId } = await scanProcessingRecords({ artifactsRoot: root });
+    const recB = byId.get(OBS_B);
+    assert.equal(extractNeedsWork(recB), false);
+    assert.equal(comparisonNeedsWork(recB), true);
+    const backlog = buildBacklog({ records, byId });
+    const item = backlog.find((i) => i.observationId === OBS_B);
+    assert.ok(item);
+    assert.equal(item.needExtract, false);
+    assert.equal(item.needCompare, true);
+
+    // Actually retry compare successfully
+    const result = await processOneObservation({
+      repoRoot: TMP,
+      artifactsRoot: root,
+      statePath: path.join(TMP, 'state.json'),
+      observation: {
+        observationId: OBS_B,
+        buildId: 'b2',
+        previousObservationId: OBS_A,
+        observationDir: obsDir,
+      },
+      record: recB,
+      byId,
+      needExtract: false,
+      needCompare: true,
+    });
+    assert.equal(result.didExtract, false);
+    assert.equal(result.didCompare, true);
+    assert.equal(result.record.comparison.status, COMPARISON_STATUS.COMPLETE);
+  });
+
+  it('3. main has obs B, monitor has evidence B → cleanup forbidden', () => {
+    const diffs = [
+      `artifacts/frontend/b2/${OBS_B}/phase2/api-evidence.json`,
+      `artifacts/frontend/b2/${OBS_B}/phase2/chunk-graph.json`,
+      `artifacts/frontend/b2/${OBS_B}/phase2/processing.json`,
+      'artifacts/frontend/phase2-processing-index.json',
+    ];
+    assert.ok(classifyMonitoringPathDiffs(diffs).hasPhase2OnlyPending);
+    const a = assessPendingLedger({
+      mainObservationId: OBS_B,
+      monitorTipObservationId: OBS_B,
+      monitoringPathDiffs: diffs,
+      commitsAheadOfMain: 0,
+    });
+    assert.equal(a.fullyLanded, false);
+    assert.equal(a.allowResetFromMain, false);
+    assert.equal(a.hasUniquePending, true);
+    assert.equal(a.phase2OnlyPending, true);
+    assert.equal(a.reason, 'phase2_analysis_pending_survives_cleanup');
+  });
+
+  it('4. main has obs+evidence B, monitor has A→B report → cleanup forbidden', () => {
+    const diffs = [
+      `artifacts/frontend/b2/${OBS_B}/phase2/diffs/${OBS_A}/evidence-diff.json`,
+      `artifacts/frontend/b2/${OBS_B}/phase2/diffs/${OBS_A}/evidence-diff.md`,
+    ];
+    assert.ok(diffs.every(isPhase2OwnedPath));
+    const a = assessPendingLedger({
+      mainObservationId: OBS_B,
+      monitorTipObservationId: OBS_B,
+      monitoringPathDiffs: diffs,
+      commitsAheadOfMain: 2,
+    });
+    assert.equal(a.allowResetFromMain, false);
+    assert.equal(a.fullyLanded, false);
+    assert.equal(a.phase2OnlyPending, true);
+  });
+
+  it('5. main has all Phase 1+2 → cleanup allowed', () => {
+    const a = assessPendingLedger({
+      mainObservationId: OBS_B,
+      monitorTipObservationId: OBS_B,
+      monitoringPathDiffs: [],
+      commitsAheadOfMain: 5, // ancestry noise ignored
+    });
+    assert.equal(a.fullyLanded, true);
+    assert.equal(a.allowResetFromMain, true);
+    assert.equal(a.hasUniquePending, false);
+    assert.equal(a.phase2OnlyPending, false);
+  });
+
+  it('6. status complete, artifact missing → fail closed / recovery', async () => {
+    const root = path.join(TMP, 'h6');
+    const obsDir = path.join(root, 'bx', OBS_B);
+    await mkdir(path.join(obsDir, 'phase2'), { recursive: true });
+    await writeFile(
+      path.join(obsDir, 'observation.json'),
+      JSON.stringify({
+        observationId: OBS_B,
+        buildId: 'bx',
+        previousObservationId: OBS_A,
+        artifacts: [{ path: 'js/index-AAAA.js', sha256: 'a'.repeat(64) }],
+      }),
+    );
+    // Claim complete without artifacts
+    await writeFile(
+      path.join(obsDir, 'phase2', 'processing.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        observationId: OBS_B,
+        buildId: 'bx',
+        previousObservationId: OBS_A,
+        extract: { status: EXTRACT_STATUS.COMPLETE },
+        comparison: { status: COMPARISON_STATUS.COMPLETE },
+      }),
+    );
+
+    const consistency = await validateProcessingConsistency({
+      observationDir: obsDir,
+      previousObservationId: OBS_A,
+      stored: {
+        extract: { status: EXTRACT_STATUS.COMPLETE },
+        comparison: { status: COMPARISON_STATUS.COMPLETE },
+      },
+    });
+    assert.equal(consistency.outcome, 'fail_closed');
+
+    const reconciled = await readOrDeriveProcessing({
+      observationDir: obsDir,
+      observationId: OBS_B,
+      buildId: 'bx',
+      previousObservationId: OBS_A,
+    });
+    assert.equal(reconciled.extract.status, EXTRACT_STATUS.EXTRACT_FAILED);
+    assert.equal(extractNeedsWork(reconciled), true);
+  });
+
+  it('7. artifact exists, index/status stale → deterministic reconciliation', async () => {
+    const root = path.join(TMP, 'h7');
+    await writeObs({
+      artifactsRoot: root,
+      observationId: OBS_A,
+      buildId: 'b1',
+      previousObservationId: null,
+      evidence: makeEvidenceDoc({
+        observationId: OBS_A,
+        items: [structuredOp({ method: 'GET', path: '/api/v3/a' })],
+      }),
+    });
+    const obsDir = path.join(root, 'b1', OBS_A);
+    // Stale stored claim
+    await writeFile(
+      path.join(obsDir, 'phase2', 'processing.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        observationId: OBS_A,
+        buildId: 'b1',
+        previousObservationId: null,
+        extract: { status: EXTRACT_STATUS.NOT_PROCESSED },
+        comparison: { status: COMPARISON_STATUS.NOT_APPLICABLE },
+      }),
+    );
+
+    const consistency = await validateProcessingConsistency({
+      observationDir: obsDir,
+      previousObservationId: null,
+      stored: { extract: { status: EXTRACT_STATUS.NOT_PROCESSED } },
+    });
+    assert.equal(consistency.outcome, 'repair');
+
+    const reconciled = await readOrDeriveProcessing({
+      observationDir: obsDir,
+      observationId: OBS_A,
+      buildId: 'b1',
+      previousObservationId: null,
+    });
+    assert.equal(reconciled.extract.status, EXTRACT_STATUS.COMPLETE);
+    assert.equal(extractNeedsWork(reconciled), false);
+  });
+
+  it('8. remote advances with extract during other run → refetch, no dup extract', () => {
+    const d = decidePhase2PushRace({
+      pushRejected: true,
+      remoteAlreadyHasEvidence: false,
+      remoteHasExtractOnly: true,
+      remoteTipDifferent: false,
+      localAttemptedExtract: true,
+      localAttemptedCompare: true,
+    });
+    assert.equal(d.action, 'refetch_continue_compare');
+    assert.equal(d.reExtract, false);
+    assert.equal(d.retryCompare, true);
+    assert.equal(d.forcePush, false);
+    assert.equal(d.discardLocalPhase2Mutations, true);
+
+    const tip = decidePhase2PushRace({
+      pushRejected: true,
+      remoteAlreadyHasEvidence: false,
+      remoteHasExtractOnly: false,
+      remoteTipDifferent: true,
+    });
+    assert.equal(tip.action, 'discard_and_reevaluate');
+    assert.equal(tip.reExtract, false);
+    assert.equal(tip.retryCompare, true);
   });
 });

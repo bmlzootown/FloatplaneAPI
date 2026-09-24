@@ -330,6 +330,7 @@ export async function buildProcessingRecord(opts) {
 
 /**
  * Read processing.json if present; otherwise derive from artifacts.
+ * Artifacts are authoritative. Status claiming complete without artifacts → fail closed / repair.
  * @param {{
  *   observationDir: string,
  *   observationId: string,
@@ -339,37 +340,222 @@ export async function buildProcessingRecord(opts) {
  * }} opts
  */
 export async function readOrDeriveProcessing(opts) {
+  const fresh = await buildProcessingRecord(opts);
   const p = processingPath(opts.observationDir);
+
   if (await exists(p)) {
     try {
       const stored = JSON.parse(await readFile(p, 'utf8'));
-      // Reconcile with live artifacts (artifacts win for extract/comparison facts).
-      const fresh = await buildProcessingRecord(opts);
-      return {
-        ...stored,
-        ...fresh,
-        // Preserve failure notes only when still failed and no promoted inventory.
-        extract:
-          fresh.extract.status === EXTRACT_STATUS.NOT_PROCESSED &&
-          stored.extract?.status === EXTRACT_STATUS.EXTRACT_FAILED
-            ? stored.extract
-            : fresh.extract,
-      };
-    } catch {
-      return buildProcessingRecord(opts);
+      const consistency = await validateProcessingConsistency({
+        observationDir: opts.observationDir,
+        previousObservationId: opts.previousObservationId ?? null,
+        stored,
+      });
+      return reconcileStoredWithArtifacts({
+        stored,
+        fresh,
+        consistency,
+      });
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        return {
+          ...fresh,
+          consistency: { outcome: 'repair', issues: ['corrupt processing.json'] },
+        };
+      }
+      throw err;
     }
   }
-  return buildProcessingRecord(opts);
+
+  return {
+    ...fresh,
+    consistency: { outcome: 'ok', issues: [] },
+  };
+}
+
+/**
+ * Validate that processing status claims match on-disk artifacts.
+ * Never: status complete without evidence files. Fail closed; repair when safe.
+ *
+ * @param {{
+ *   observationDir: string,
+ *   previousObservationId?: string|null,
+ *   stored?: object|null,
+ * }} opts
+ */
+export async function validateProcessingConsistency(opts) {
+  const { extract, hasEvidence, hasStatus } = await inspectExtractArtifacts(
+    opts.observationDir,
+  );
+  const { comparison } = await inspectComparisonArtifacts(
+    opts.observationDir,
+    opts.previousObservationId ?? null,
+  );
+
+  /** @type {string[]} */
+  const issues = [];
+  /** @type {'ok'|'repair'|'fail_closed'} */
+  let outcome = 'ok';
+
+  const stored = opts.stored;
+  if (stored?.extract?.status === EXTRACT_STATUS.COMPLETE || stored?.extract?.status === EXTRACT_STATUS.INCOMPLETE_PROMOTED) {
+    if (!hasEvidence || !hasStatus) {
+      issues.push(
+        'stored extract status is complete/incomplete_promoted but evidence artifacts missing',
+      );
+      outcome = 'fail_closed';
+    }
+  }
+
+  if (stored?.comparison?.status === COMPARISON_STATUS.COMPLETE) {
+    if (comparison.status !== COMPARISON_STATUS.COMPLETE) {
+      issues.push(
+        'stored comparison status is complete but diff artifacts missing',
+      );
+      outcome = outcome === 'fail_closed' ? 'fail_closed' : 'repair';
+    }
+  }
+
+  // Index/stale: artifacts present but we'd claim not_processed — reconciliation is deterministic.
+  if (
+    (hasEvidence && hasStatus) &&
+    stored?.extract?.status === EXTRACT_STATUS.NOT_PROCESSED
+  ) {
+    issues.push('artifacts exist but stored extract was not_processed — reconcile from artifacts');
+    if (outcome === 'ok') outcome = 'repair';
+  }
+
+  return {
+    outcome,
+    issues,
+    artifactExtract: extract,
+    artifactComparison: comparison,
+    hasEvidence,
+    hasStatus,
+  };
+}
+
+/**
+ * @param {object} stored
+ * @param {ProcessingRecord} fresh
+ * @param {Awaited<ReturnType<typeof validateProcessingConsistency>>} consistency
+ */
+export function reconcileStoredWithArtifacts({ stored, fresh, consistency }) {
+  // Artifacts win for extract/comparison facts.
+  if (consistency.outcome === 'fail_closed') {
+    // Status claimed complete without artifacts → treat as extract_failed (retryable recovery).
+    return {
+      ...fresh,
+      extract: {
+        status: EXTRACT_STATUS.EXTRACT_FAILED,
+        closureStatus: null,
+        extractedAt: null,
+        error:
+          consistency.issues.join('; ') ||
+          'status claimed complete without durable artifacts',
+        refuseRemoval: false,
+      },
+      comparison:
+        fresh.previousObservationId == null
+          ? fresh.comparison
+          : {
+              status: COMPARISON_STATUS.PENDING,
+              fromObservationId: fresh.previousObservationId,
+              comparisonStatus: null,
+              diffRelPath: null,
+              comparedAt: null,
+              error: 'blocked until extract repaired',
+              summaryCounts: null,
+            },
+      consistency: {
+        outcome: 'fail_closed',
+        issues: consistency.issues,
+      },
+    };
+  }
+
+  // Preserve operational extract_failed note only when artifacts still absent.
+  const extract =
+    fresh.extract.status === EXTRACT_STATUS.NOT_PROCESSED &&
+    stored.extract?.status === EXTRACT_STATUS.EXTRACT_FAILED
+      ? stored.extract
+      : fresh.extract;
+
+  // Preserve comparison failed when still pending-on-disk (no diff) so backlog retries.
+  let comparison = fresh.comparison;
+  if (
+    fresh.comparison.status === COMPARISON_STATUS.PENDING &&
+    stored.comparison?.status === COMPARISON_STATUS.FAILED
+  ) {
+    comparison = {
+      ...fresh.comparison,
+      status: COMPARISON_STATUS.FAILED,
+      error: stored.comparison.error || 'compare failed',
+    };
+  }
+
+  return {
+    ...stored,
+    ...fresh,
+    extract,
+    comparison,
+    consistency: {
+      outcome: consistency.outcome,
+      issues: consistency.issues,
+    },
+  };
+}
+
+/** @param {ProcessingRecord} fresh @param {object} consistency */
+function applyConsistencyRepair(fresh, consistency) {
+  return {
+    ...fresh,
+    consistency: {
+      outcome: consistency?.outcome || 'ok',
+      issues: consistency?.issues || [],
+    },
+  };
+}
+
+/**
+ * Assert a processing record may be written: never claim complete without artifacts.
+ * @param {ProcessingRecord} record
+ * @param {{ hasEvidence: boolean, hasStatus: boolean }} disk
+ */
+export function assertProcessingWritable(record, disk) {
+  const claimComplete =
+    record.extract?.status === EXTRACT_STATUS.COMPLETE ||
+    record.extract?.status === EXTRACT_STATUS.INCOMPLETE_PROMOTED;
+  if (claimComplete && (!disk.hasEvidence || !disk.hasStatus)) {
+    throw new Error(
+      `Refuse to write extract status=${record.extract.status} without durable evidence artifacts`,
+    );
+  }
+  if (
+    record.comparison?.status === COMPARISON_STATUS.COMPLETE &&
+    !record.comparison.diffRelPath
+  ) {
+    throw new Error(
+      'Refuse to write comparison status=complete without diffRelPath',
+    );
+  }
 }
 
 /**
  * Transactional write of processing.json under phase2/.
+ * Validates consistency before commit (fail closed).
  * @param {string} observationDir
  * @param {ProcessingRecord} record
  */
 export async function writeProcessingRecord(observationDir, record) {
   const phase2Dir = path.join(observationDir, PHASE2_DIR);
   await mkdir(phase2Dir, { recursive: true });
+  const evidencePath = path.join(phase2Dir, EVIDENCE_FILE);
+  const statusPath = path.join(phase2Dir, STATUS_FILE);
+  const hasEvidence = await exists(evidencePath);
+  const hasStatus = await exists(statusPath);
+  assertProcessingWritable(record, { hasEvidence, hasStatus });
+
   const dest = processingPath(observationDir);
   const staging = `${dest}.staging-${process.pid}-${Date.now()}`;
   try {

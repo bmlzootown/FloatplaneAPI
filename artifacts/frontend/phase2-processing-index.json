@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "orchestratorId": "phase2.3-frontend-evidence-orchestrate",
-  "orchestratorVersion": "2.3.0",
-  "updatedAt": "2026-09-24T20:21:29.519Z",
+  "orchestratorVersion": "2.3.1",
+  "updatedAt": "2026-09-24T20:39:22.706Z",
   "note": "Phase 2 processing index only. Does not alter Phase 1 LKG meaning (state/last-known-frontend.json).",
   "observations": [
     {
