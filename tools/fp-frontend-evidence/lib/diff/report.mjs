@@ -1,5 +1,5 @@
 /**
- * Human-readable Markdown report for Phase 2.2 evidence diffs (§11).
+ * Human-readable Markdown report for Phase 2.2 / 2.2.1 evidence diffs.
  */
 
 /**
@@ -38,10 +38,35 @@ export function renderEvidenceDiffMarkdown(diff) {
   lines.push('');
   lines.push(`Comparison status: **${diff.comparisonStatus}**`);
   lines.push('');
-  if (diff.removalSuppressed) {
+  lines.push('### Directional gating (2.2.1)');
+  lines.push('');
+  lines.push(
+    `* Addition conclusions allowed (requires FROM complete): **${bool(diff.additionConclusionsAllowed)}**`,
+  );
+  lines.push(
+    `* Disappearance conclusions allowed (requires TO complete): **${bool(diff.disappearanceConclusionsAllowed)}**`,
+  );
+  lines.push(
+    `* Method-set conclusions allowed (requires both complete): **${bool(diff.methodSetConclusionsAllowed)}**`,
+  );
+  lines.push('');
+
+  if (!diff.additionConclusionsAllowed && !diff.disappearanceConclusionsAllowed) {
     lines.push(
-      '**Removal conclusions suppressed** (incomplete inventory and/or `refuseRemoval`). ' +
-        'Additions may still be listed; do not treat missing ops as API removal.',
+      '**FROM and TO incomplete:** additions that depend on absence from FROM are suppressed; ' +
+        'disappearances that depend on absence from TO are suppressed.',
+    );
+    lines.push('');
+  } else if (!diff.additionConclusionsAllowed) {
+    lines.push(
+      '**FROM incomplete:** additions that depend on absence from FROM are suppressed. ' +
+        'Disappearances may still appear when TO is complete.',
+    );
+    lines.push('');
+  } else if (!diff.disappearanceConclusionsAllowed) {
+    lines.push(
+      '**TO incomplete:** disappearances that depend on absence from TO are suppressed. ' +
+        'Additions may still appear when FROM is complete.',
     );
     lines.push('');
   }
@@ -49,11 +74,12 @@ export function renderEvidenceDiffMarkdown(diff) {
   lines.push('## Summary');
   lines.push('');
   const c = diff.counts || {};
+  lines.push('### Atomic (primary facts)');
+  lines.push('');
   lines.push(`* Structured operations added: **${c.structured_operation_added || 0}**`);
   lines.push(
     `* Structured operations disappeared from frontend evidence: **${c.structured_operation_disappeared || 0}**`,
   );
-  lines.push(`* Method-set changes: **${c.method_set_changed || 0}**`);
   lines.push(`* Request-construction changes: **${c.request_construction_changed || 0}**`);
   lines.push(`* Auth/header evidence changes: **${c.auth_evidence_changed || 0}**`);
   lines.push(`* Response mapper changes: **${c.response_mapper_changed || 0}**`);
@@ -62,12 +88,24 @@ export function renderEvidenceDiffMarkdown(diff) {
     `* Weaker references added: **${c.weak_reference_added || 0}**; disappeared: **${c.weak_reference_disappeared || 0}**`,
   );
   lines.push(`* Frontend-only / provenance movement: **${c.provenance_moved || 0}**`);
-  lines.push(`* Total recorded changes: **${c.total || 0}**`);
+  lines.push(`* Atomic total: **${c.totalAtomic ?? '—'}**`);
+  lines.push('');
+  lines.push('### Derived (grouped — do not triple-count with atomic)');
+  lines.push('');
+  lines.push(
+    `* Method-set changes: **${c.method_set_changed || 0}** (derived from atomic method+path add/disappear on the same path)`,
+  );
+  lines.push(`* Derived total: **${c.totalDerived ?? '—'}**`);
+  lines.push('');
+  lines.push(`* Authoritative emitted changes (atomic + derived): **${c.total || 0}**`);
+  lines.push(
+    `* Suppressed (indeterminate) conclusions: **${c.suppressedTotal || 0}** — not in authoritative totals`,
+  );
   lines.push('');
 
   sectionTable(
     lines,
-    'Structured operation changes',
+    'Structured operation changes (atomic + derived)',
     diff.changes.filter((x) =>
       [
         'structured_operation_added',
@@ -115,6 +153,24 @@ export function renderEvidenceDiffMarkdown(diff) {
     diff.changes.filter((x) => x.category === 'provenance_moved'),
   );
 
+  lines.push('## Suppressed / indeterminate');
+  lines.push('');
+  const suppressed = diff.suppressedChanges || [];
+  if (!suppressed.length) {
+    lines.push('_None._');
+    lines.push('');
+  } else {
+    for (const s of suppressed) {
+      lines.push(
+        `* **\`${s.proposedCategory}\`** (incomplete: ${s.incompleteObservation}) — ${s.reason}`,
+      );
+      if (s.path || s.method) {
+        lines.push(`  * ${s.method || '—'} \`${s.path || '—'}\``);
+      }
+    }
+    lines.push('');
+  }
+
   lines.push('## Warnings / limitations');
   lines.push('');
   if (diff.warnings?.length) {
@@ -145,8 +201,8 @@ function sectionTable(lines, title, changes) {
     lines.push('');
     return;
   }
-  lines.push('| Change | Method | Path | Evidence |');
-  lines.push('| ------ | ------ | ---- | -------- |');
+  lines.push('| Change | Kind | Method | Path | Evidence |');
+  lines.push('| ------ | ---- | ------ | ---- | -------- |');
   for (const ch of changes) {
     const method =
       ch.method ||
@@ -155,8 +211,9 @@ function sectionTable(lines, title, changes) {
         : '—');
     const path = ch.path || '—';
     const evidence = citeEvidence(ch);
+    const kind = ch.kind || 'atomic';
     lines.push(
-      `| \`${ch.category}\` | ${escapeCell(String(method))} | \`${escapeCell(path)}\` | ${escapeCell(evidence)} |`,
+      `| \`${ch.category}\` | ${kind} | ${escapeCell(String(method))} | \`${escapeCell(path)}\` | ${escapeCell(evidence)} |`,
     );
   }
   lines.push('');
@@ -176,7 +233,7 @@ function sectionList(lines, title, changes) {
     return;
   }
   for (const ch of changes) {
-    lines.push(`* **\`${ch.category}\`** — ${ch.summary}`);
+    lines.push(`* **\`${ch.category}\`** (${ch.kind || 'atomic'}) — ${ch.summary}`);
     if (ch.path || ch.method) {
       lines.push(
         `  * ${ch.method || '—'} \`${ch.path || '—'}\` · ${citeEvidence(ch)}`,
@@ -220,4 +277,9 @@ function escapeCell(s) {
 function fmt(v) {
   if (v === null || v === undefined) return 'null';
   return String(v);
+}
+
+/** @param {unknown} v */
+function bool(v) {
+  return v ? 'yes' : 'no';
 }

@@ -1,8 +1,14 @@
 /** Phase 2.2 frontend evidence semantic diff — constants. */
 
 export const COMPARATOR_ID = 'phase2.2-frontend-evidence-diff';
-export const COMPARATOR_VERSION = '2.2.0';
-export const DIFF_SCHEMA_VERSION = 1;
+export const COMPARATOR_VERSION = '2.2.1';
+export const DIFF_SCHEMA_VERSION = 2;
+
+/** Change kind: atomic facts vs derived/grouped summaries. */
+export const CHANGE_KIND = Object.freeze({
+  ATOMIC: 'atomic',
+  DERIVED: 'derived',
+});
 
 /** Subdirectory under phase2/ for A→B comparison artifacts (on the TO observation). */
 export const DIFFS_SUBDIR = 'diffs';

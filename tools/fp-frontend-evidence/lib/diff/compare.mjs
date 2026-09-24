@@ -1,13 +1,17 @@
 /**
  * Deterministic semantic comparison of two Phase 2.1.1 evidence inventories.
  *
- * Completeness gating (§1), structured ops (§2), request/auth/response (§3–5),
- * realtime (§6), weak evidence (§7), frontend-churn suppression (§8).
+ * Phase 2.2.1: directional completeness gating (A→B).
+ * - Additions (present B, absent A): require A complete enough
+ * - Disappearances (present A, absent B): require B complete enough
+ * - method_set_changed: require BOTH complete
+ * - Presence-to-presence (same evidence id both sides): allowed without relying on absence
  */
 
 import { changeId, normalizeMethodSet } from './change-id.mjs';
 import {
   CHANGE_CATEGORY,
+  CHANGE_KIND,
   COMPARATOR_ID,
   COMPARATOR_VERSION,
   COMPARISON_STATUS,
@@ -30,36 +34,87 @@ export function compareEvidenceInventories(input) {
   /** @type {string[]} */
   const warnings = [];
 
-  const removalSuppressed =
-    !from.completeEnough ||
-    !to.completeEnough ||
-    from.refuseRemoval ||
-    to.refuseRemoval;
+  // Directional gating (2.2.1)
+  const additionConclusionsAllowed = Boolean(from.completeEnough);
+  const disappearanceConclusionsAllowed = Boolean(to.completeEnough);
+  const methodSetConclusionsAllowed =
+    Boolean(from.completeEnough) && Boolean(to.completeEnough);
+
+  // Legacy alias: true when disappearance conclusions are not allowed
+  const removalSuppressed = !disappearanceConclusionsAllowed;
 
   const comparisonStatus =
     from.completeEnough && to.completeEnough
       ? COMPARISON_STATUS.COMPLETE
       : COMPARISON_STATUS.INCOMPLETE;
 
-  if (removalSuppressed) {
-    warnings.push(
-      'Removal conclusions suppressed: one or both inventories are incomplete or refuseRemoval=true. ' +
-        'Additions may still be reported; disappeared structured operations are not authoritative.',
-    );
-  }
+  pushDirectionalWarnings(warnings, {
+    fromComplete: from.completeEnough,
+    toComplete: to.completeEnough,
+    additionConclusionsAllowed,
+    disappearanceConclusionsAllowed,
+    methodSetConclusionsAllowed,
+  });
 
   const fromById = indexById(from.evidence.items);
   const toById = indexById(to.evidence.items);
 
   /** @type {object[]} */
   const changes = [];
+  /** @type {object[]} */
+  const suppressedChanges = [];
   /** @type {Set<string>} */
   const seenChangeIds = new Set();
+  /** @type {Set<string>} */
+  const seenSuppressedIds = new Set();
 
   function pushChange(chg) {
     if (seenChangeIds.has(chg.id)) return;
     seenChangeIds.add(chg.id);
     changes.push(chg);
+  }
+
+  /**
+   * @param {{
+   *   id: string,
+   *   proposedCategory: string,
+   *   reason: string,
+   *   incompleteObservation: 'from' | 'to' | 'both',
+   *   evidenceCategory?: string | null,
+   *   path?: string | null,
+   *   method?: string | null,
+   *   fromEvidenceId?: string | null,
+   *   toEvidenceId?: string | null,
+   *   details?: object,
+   * }} rec
+   */
+  function suppress(rec) {
+    if (seenSuppressedIds.has(rec.id) || seenChangeIds.has(rec.id)) return;
+    seenSuppressedIds.add(rec.id);
+    suppressedChanges.push({
+      id: rec.id,
+      proposedCategory: rec.proposedCategory,
+      reason: rec.reason,
+      incompleteObservation: rec.incompleteObservation,
+      evidenceCategory: rec.evidenceCategory || null,
+      path: rec.path || null,
+      method: rec.method || null,
+      fromEvidenceId: rec.fromEvidenceId ?? null,
+      toEvidenceId: rec.toEvidenceId ?? null,
+      details: rec.details || {},
+    });
+  }
+
+  function incompleteSideForAddition() {
+    if (!from.completeEnough && !to.completeEnough) return 'both';
+    if (!from.completeEnough) return 'from';
+    return 'both';
+  }
+
+  function incompleteSideForDisappearance() {
+    if (!from.completeEnough && !to.completeEnough) return 'both';
+    if (!to.completeEnough) return 'to';
+    return 'both';
   }
 
   // --- Structured operations (primary) ---
@@ -75,15 +130,31 @@ export function compareEvidenceInventories(input) {
   for (const id of toStructIds) {
     if (fromStructIds.has(id)) continue;
     const item = toById.get(id);
-    pushChange({
-      id: changeId({
-        category: CHANGE_CATEGORY.STRUCTURED_OPERATION_ADDED,
+    const chgId = changeId({
+      category: CHANGE_CATEGORY.STRUCTURED_OPERATION_ADDED,
+      evidenceCategory: 'structured_operation',
+      path: item.pathNormalized || item.path,
+      method: item.method,
+      evidenceId: id,
+    });
+    if (!additionConclusionsAllowed) {
+      suppress({
+        id: chgId,
+        proposedCategory: CHANGE_CATEGORY.STRUCTURED_OPERATION_ADDED,
+        reason:
+          'Addition depends on absence from FROM; FROM inventory is not complete enough for absence to be meaningful',
+        incompleteObservation: incompleteSideForAddition(),
         evidenceCategory: 'structured_operation',
         path: item.pathNormalized || item.path,
         method: item.method,
-        evidenceId: id,
-      }),
+        toEvidenceId: id,
+      });
+      continue;
+    }
+    pushChange({
+      id: chgId,
       category: CHANGE_CATEGORY.STRUCTURED_OPERATION_ADDED,
+      kind: CHANGE_KIND.ATOMIC,
       evidenceCategory: 'structured_operation',
       summary:
         'The frontend now contains structured evidence for this operation. ' +
@@ -102,19 +173,31 @@ export function compareEvidenceInventories(input) {
   for (const id of fromStructIds) {
     if (toStructIds.has(id)) continue;
     const item = fromById.get(id);
-    if (removalSuppressed) {
-      // Do not emit structured_operation_disappeared when suppressed.
-      continue;
-    }
-    pushChange({
-      id: changeId({
-        category: CHANGE_CATEGORY.STRUCTURED_OPERATION_DISAPPEARED,
+    const chgId = changeId({
+      category: CHANGE_CATEGORY.STRUCTURED_OPERATION_DISAPPEARED,
+      evidenceCategory: 'structured_operation',
+      path: item.pathNormalized || item.path,
+      method: item.method,
+      evidenceId: id,
+    });
+    if (!disappearanceConclusionsAllowed) {
+      suppress({
+        id: chgId,
+        proposedCategory: CHANGE_CATEGORY.STRUCTURED_OPERATION_DISAPPEARED,
+        reason:
+          'Disappearance depends on absence from TO; TO inventory is not complete enough for absence to be meaningful',
+        incompleteObservation: incompleteSideForDisappearance(),
         evidenceCategory: 'structured_operation',
         path: item.pathNormalized || item.path,
         method: item.method,
-        evidenceId: id,
-      }),
+        fromEvidenceId: id,
+      });
+      continue;
+    }
+    pushChange({
+      id: chgId,
       category: CHANGE_CATEGORY.STRUCTURED_OPERATION_DISAPPEARED,
+      kind: CHANGE_KIND.ATOMIC,
       evidenceCategory: 'structured_operation',
       summary:
         'Structured frontend evidence for this operation disappeared. ' +
@@ -130,7 +213,7 @@ export function compareEvidenceInventories(input) {
     });
   }
 
-  // Method-set changes by normalized path (higher-level; may coexist with add/disappear)
+  // Method-set changes: BOTH sides must be complete (derived / grouped)
   const fromMethodsByPath = methodsByPath(fromStructured);
   const toMethodsByPath = methodsByPath(toStructured);
   const allPaths = new Set([
@@ -143,30 +226,43 @@ export function compareEvidenceInventories(input) {
     const beforeKey = normalizeMethodSet(before);
     const afterKey = normalizeMethodSet(after);
     if (beforeKey === afterKey) continue;
-    // Only emit method_set_changed when both sides have at least one method for the path,
-    // or when a path gained/lost methods among remaining ops. Skip pure add-only new paths
-    // (those are covered by structured_operation_added alone) unless methods differ on shared path.
-    if (before.length === 0 || after.length === 0) {
-      // Pure path appear/disappear: still useful as method_set when not removal-suppressed
-      // for disappear, or always for appear — but avoid noisy double-count: emit only when
-      // both sides non-empty OR when methods differ beyond empty↔singleton for shared semantics.
-      if (before.length === 0 && after.length > 0) continue; // covered by added
-      if (after.length === 0 && before.length > 0) {
-        if (removalSuppressed) continue;
-        // covered by disappeared — skip separate method_set for pure removal
-        continue;
-      }
+    // Skip pure path appear/disappear — covered by atomic add/disappear only
+    if (before.length === 0 || after.length === 0) continue;
+
+    const chgId = changeId({
+      category: CHANGE_CATEGORY.METHOD_SET_CHANGED,
+      path: p,
+      methodsBefore: before,
+      methodsAfter: after,
+    });
+    if (!methodSetConclusionsAllowed) {
+      suppress({
+        id: chgId,
+        proposedCategory: CHANGE_CATEGORY.METHOD_SET_CHANGED,
+        reason:
+          'Complete method-set change requires both FROM and TO inventories to be complete enough; ' +
+          'positive atomic add/disappear facts may still be retained when their direction allows',
+        incompleteObservation:
+          !from.completeEnough && !to.completeEnough
+            ? 'both'
+            : !from.completeEnough
+              ? 'from'
+              : 'to',
+        evidenceCategory: 'structured_operation',
+        path: p,
+        details: {
+          methodsBefore: [...before].sort(),
+          methodsAfter: [...after].sort(),
+        },
+      });
+      continue;
     }
     pushChange({
-      id: changeId({
-        category: CHANGE_CATEGORY.METHOD_SET_CHANGED,
-        path: p,
-        methodsBefore: before,
-        methodsAfter: after,
-      }),
+      id: chgId,
       category: CHANGE_CATEGORY.METHOD_SET_CHANGED,
+      kind: CHANGE_KIND.DERIVED,
       evidenceCategory: 'structured_operation',
-      summary: `Structured HTTP method set for path changed: {${beforeKey}} → {${afterKey}}.`,
+      summary: `Structured HTTP method set for path changed: {${beforeKey}} → {${afterKey}} (derived grouping of atomic method+path facts).`,
       path: p,
       method: null,
       fromEvidenceId: null,
@@ -176,12 +272,13 @@ export function compareEvidenceInventories(input) {
       details: {
         methodsBefore: [...before].sort(),
         methodsAfter: [...after].sort(),
+        derivedFrom: 'atomic structured_operation add/disappear on same path',
       },
       apiChangeClaim: false,
     });
   }
 
-  // Shared structured ops: request / response mapper / provenance
+  // Shared structured ops: presence-to-presence (allowed even if graphs incomplete)
   for (const id of fromStructIds) {
     if (!toStructIds.has(id)) continue;
     const a = fromById.get(id);
@@ -192,21 +289,24 @@ export function compareEvidenceInventories(input) {
     compareProvenanceMovement(a, b, pushChange);
   }
 
-  // --- Realtime (separate from REST totals) ---
+  // --- Realtime ---
   compareIdSetCategory({
     categoryName: 'realtime_operation',
     fromById,
     toById,
-    removalSuppressed,
+    additionConclusionsAllowed,
+    disappearanceConclusionsAllowed,
+    incompleteSideForAddition,
+    incompleteSideForDisappearance,
     addedCategory: CHANGE_CATEGORY.REALTIME_EVIDENCE_CHANGED,
     disappearedCategory: CHANGE_CATEGORY.REALTIME_EVIDENCE_CHANGED,
     addedVerb: 'added',
     disappearedVerb: 'disappeared',
     pushChange,
+    suppress,
     isWeak: false,
   });
 
-  // Shared realtime: provenance move only
   for (const [id, a] of fromById) {
     if (a.category !== 'realtime_operation') continue;
     const b = toById.get(id);
@@ -220,12 +320,16 @@ export function compareEvidenceInventories(input) {
       categoryName: weakCat,
       fromById,
       toById,
-      removalSuppressed,
+      additionConclusionsAllowed,
+      disappearanceConclusionsAllowed,
+      incompleteSideForAddition,
+      incompleteSideForDisappearance,
       addedCategory: CHANGE_CATEGORY.WEAK_REFERENCE_ADDED,
       disappearedCategory: CHANGE_CATEGORY.WEAK_REFERENCE_DISAPPEARED,
       addedVerb: 'added',
       disappearedVerb: 'disappeared',
       pushChange,
+      suppress,
       isWeak: true,
     });
     for (const [id, a] of fromById) {
@@ -236,17 +340,15 @@ export function compareEvidenceInventories(input) {
     }
   }
 
-  // Auth-oriented: host:auth network_reference and auth-ish paths already covered by
-  // weak/structured sets. Additionally flag contentType / auth path request changes.
-  // Dedicated auth_evidence_changed when structuralKind or path is auth-related and
-  // the item itself was added/removed (re-tag from weak if applicable) — keep simple:
-  // emit auth_evidence_changed for network_reference host:auth id changes and for
-  // structured ops under auth-ish paths when request contentType/hasHeaders flip.
   emitAuthSpecificChanges({
     fromById,
     toById,
-    removalSuppressed,
+    additionConclusionsAllowed,
+    disappearanceConclusionsAllowed,
+    incompleteSideForAddition,
+    incompleteSideForDisappearance,
     pushChange,
+    suppress,
     existingIds: seenChangeIds,
   });
 
@@ -255,8 +357,13 @@ export function compareEvidenceInventories(input) {
     if (c !== 0) return c;
     return x.id.localeCompare(y.id);
   });
+  suppressedChanges.sort((x, y) => {
+    const c = String(x.proposedCategory).localeCompare(String(y.proposedCategory));
+    if (c !== 0) return c;
+    return x.id.localeCompare(y.id);
+  });
 
-  const counts = countByCategory(changes);
+  const counts = buildCounts(changes, suppressedChanges);
 
   return {
     schemaVersion: DIFF_SCHEMA_VERSION,
@@ -281,15 +388,73 @@ export function compareEvidenceInventories(input) {
         completeEnough: to.completeEnough,
       },
     },
+    gating: {
+      additionConclusionsAllowed,
+      disappearanceConclusionsAllowed,
+      methodSetConclusionsAllowed,
+      /** @deprecated use disappearanceConclusionsAllowed; kept for readers of 2.2.0 */
+      removalSuppressed,
+    },
+    additionConclusionsAllowed,
+    disappearanceConclusionsAllowed,
+    methodSetConclusionsAllowed,
+    /** @deprecated use disappearanceConclusionsAllowed */
     removalSuppressed,
+    /** @deprecated alias of removalSuppressed */
     refuseRemoval: removalSuppressed,
     counts,
     changes,
+    suppressedChanges,
     warnings,
     disclaimer:
       'Frontend-evidence change report only. Not an authoritative server API changelog. ' +
-      'Do not treat structured_operation_disappeared as API removal without a later verification phase.',
+      'Do not treat structured_operation_disappeared as API removal without a later verification phase. ' +
+      'method_set_changed is a derived grouping of atomic method+path facts — do not triple-count with add/disappear.',
   };
+}
+
+/**
+ * @param {string[]} warnings
+ * @param {{
+ *   fromComplete: boolean,
+ *   toComplete: boolean,
+ *   additionConclusionsAllowed: boolean,
+ *   disappearanceConclusionsAllowed: boolean,
+ *   methodSetConclusionsAllowed: boolean,
+ * }} g
+ */
+function pushDirectionalWarnings(warnings, g) {
+  if (g.fromComplete && g.toComplete) return;
+
+  if (!g.additionConclusionsAllowed && !g.disappearanceConclusionsAllowed) {
+    warnings.push(
+      'FROM and TO inventories are not both complete enough. ' +
+        'Additions that depend on absence from FROM are suppressed; ' +
+        'disappearances that depend on absence from TO are suppressed; ' +
+        'method-set changes are suppressed. ' +
+        'Presence-to-presence comparisons of matched evidence may still be reported.',
+    );
+    return;
+  }
+  if (!g.additionConclusionsAllowed) {
+    warnings.push(
+      'FROM inventory is incomplete (or refuseRemoval): additions that depend on absence from FROM are suppressed. ' +
+        'Disappearances may still be reported when TO is complete enough. ' +
+        'Presence-to-presence comparisons remain allowed.',
+    );
+  }
+  if (!g.disappearanceConclusionsAllowed) {
+    warnings.push(
+      'TO inventory is incomplete (or refuseRemoval): disappearances that depend on absence from TO are suppressed. ' +
+        'Additions may still be reported when FROM is complete enough. ' +
+        'Presence-to-presence comparisons remain allowed.',
+    );
+  }
+  if (!g.methodSetConclusionsAllowed) {
+    warnings.push(
+      'Complete method-set change conclusions require both sides complete; method_set_changed is suppressed.',
+    );
+  }
 }
 
 /**
@@ -301,10 +466,7 @@ function indexById(items) {
   const map = new Map();
   for (const item of items || []) {
     if (!item?.id) continue;
-    if (map.has(item.id)) {
-      // Should not happen after 2.1.1 dedupe; keep first, ignore dup id
-      continue;
-    }
+    if (map.has(item.id)) continue;
     map.set(item.id, item);
   }
   return map;
@@ -328,6 +490,7 @@ function methodsByPath(structured) {
 }
 
 /**
+ * Presence-to-presence request meta compare (does not rely on inventory absence).
  * @param {object} a
  * @param {object} b
  * @param {(c: object) => void} pushChange
@@ -346,8 +509,7 @@ function compareRequestMeta(a, b, pushChange) {
 
   for (const [prop, before, after] of fields) {
     if (stableJson(before) === stableJson(after)) continue;
-    const isAuthish =
-      prop === 'contentType' && isAuthRelatedItem(a);
+    const isAuthish = prop === 'contentType' && isAuthRelatedItem(a);
     const category = isAuthish
       ? CHANGE_CATEGORY.AUTH_EVIDENCE_CHANGED
       : CHANGE_CATEGORY.REQUEST_CONSTRUCTION_CHANGED;
@@ -360,6 +522,7 @@ function compareRequestMeta(a, b, pushChange) {
         property: prop,
       }),
       category,
+      kind: CHANGE_KIND.ATOMIC,
       evidenceCategory: 'structured_operation',
       summary: isAuthish
         ? `Frontend auth/header-related request field "${prop}" changed for structured operation.`
@@ -370,15 +533,13 @@ function compareRequestMeta(a, b, pushChange) {
       toEvidenceId: b.id,
       fromProvenance: sanitizeProvenance(a.provenance),
       toProvenance: sanitizeProvenance(b.provenance),
-      details: { property: prop, before, after },
+      details: { property: prop, before, after, presenceToPresence: true },
       apiChangeClaim: false,
     });
   }
 }
 
 /**
- * Response mapper name is structurally associated in Phase 2.1 — strong enough to compare.
- * Field-level response usage is NOT available; skip response_field_reference_*.
  * @param {object} a
  * @param {object} b
  * @param {(c: object) => void} pushChange
@@ -387,7 +548,6 @@ function compareResponseMapper(a, b, pushChange) {
   const before = a.request?.responseMapper ?? null;
   const after = b.request?.responseMapper ?? null;
   if (before === after) return;
-  // Only report when at least one side has a mapper (avoid null↔null noise)
   if (before == null && after == null) return;
   pushChange({
     id: changeId({
@@ -398,6 +558,7 @@ function compareResponseMapper(a, b, pushChange) {
       property: 'responseMapper',
     }),
     category: CHANGE_CATEGORY.RESPONSE_MAPPER_CHANGED,
+    kind: CHANGE_KIND.ATOMIC,
     evidenceCategory: 'structured_operation',
     summary:
       'Frontend response mapper reference changed. ' +
@@ -408,13 +569,17 @@ function compareResponseMapper(a, b, pushChange) {
     toEvidenceId: b.id,
     fromProvenance: sanitizeProvenance(a.provenance),
     toProvenance: sanitizeProvenance(b.provenance),
-    details: { property: 'responseMapper', before, after },
+    details: {
+      property: 'responseMapper',
+      before,
+      after,
+      presenceToPresence: true,
+    },
     apiChangeClaim: false,
   });
 }
 
 /**
- * Provenance movement vs suppressed frontend-only churn (§8).
  * @param {object} a
  * @param {object} b
  * @param {(c: object) => void} pushChange
@@ -423,13 +588,10 @@ function compareProvenanceMovement(a, b, pushChange) {
   const pathsA = provenancePathSet(a.provenance);
   const pathsB = provenancePathSet(b.provenance);
 
-  // Same source path set → offset/sha/snippet/minify/dup-count churn → suppress
   if (stableJson([...pathsA].sort()) === stableJson([...pathsB].sort())) {
     return;
   }
 
-  // Content-hashed rename heuristic: basename changed but same role count and
-  // semantic id identical — still record as provenance_moved (informational).
   pushChange({
     id: changeId({
       category: CHANGE_CATEGORY.PROVENANCE_MOVED,
@@ -439,6 +601,7 @@ function compareProvenanceMovement(a, b, pushChange) {
       evidenceId: a.id,
     }),
     category: CHANGE_CATEGORY.PROVENANCE_MOVED,
+    kind: CHANGE_KIND.ATOMIC,
     evidenceCategory: a.category,
     summary:
       'Semantic evidence identity unchanged; source artifact/provenance moved. ' +
@@ -452,6 +615,7 @@ function compareProvenanceMovement(a, b, pushChange) {
     details: {
       sourcePathsBefore: [...pathsA].sort(),
       sourcePathsAfter: [...pathsB].sort(),
+      presenceToPresence: true,
     },
     apiChangeClaim: false,
     frontendOnly: true,
@@ -463,12 +627,16 @@ function compareProvenanceMovement(a, b, pushChange) {
  *   categoryName: string,
  *   fromById: Map<string, object>,
  *   toById: Map<string, object>,
- *   removalSuppressed: boolean,
+ *   additionConclusionsAllowed: boolean,
+ *   disappearanceConclusionsAllowed: boolean,
+ *   incompleteSideForAddition: () => 'from' | 'to' | 'both',
+ *   incompleteSideForDisappearance: () => 'from' | 'to' | 'both',
  *   addedCategory: string,
  *   disappearedCategory: string,
  *   addedVerb: string,
  *   disappearedVerb: string,
  *   pushChange: (c: object) => void,
+ *   suppress: (r: object) => void,
  *   isWeak: boolean,
  * }} opts
  */
@@ -485,16 +653,33 @@ function compareIdSetCategory(opts) {
   for (const id of toSet) {
     if (fromSet.has(id)) continue;
     const item = opts.toById.get(id);
-    opts.pushChange({
-      id: changeId({
-        category: opts.addedCategory,
+    const chgId = changeId({
+      category: opts.addedCategory,
+      evidenceCategory: opts.categoryName,
+      path: item.pathNormalized || item.path,
+      method: item.method,
+      evidenceId: id,
+      property: opts.addedVerb,
+    });
+    if (!opts.additionConclusionsAllowed) {
+      opts.suppress({
+        id: chgId,
+        proposedCategory: opts.addedCategory,
+        reason:
+          'Addition depends on absence from FROM; FROM inventory is not complete enough',
+        incompleteObservation: opts.incompleteSideForAddition(),
         evidenceCategory: opts.categoryName,
         path: item.pathNormalized || item.path,
         method: item.method,
-        evidenceId: id,
-        property: opts.addedVerb,
-      }),
+        toEvidenceId: id,
+        details: { verb: opts.addedVerb },
+      });
+      continue;
+    }
+    opts.pushChange({
+      id: chgId,
       category: opts.addedCategory,
+      kind: CHANGE_KIND.ATOMIC,
       evidenceCategory: opts.categoryName,
       summary: opts.isWeak
         ? `Weaker ${opts.categoryName} evidence appeared in the frontend. Not a structured operation addition.`
@@ -513,18 +698,34 @@ function compareIdSetCategory(opts) {
 
   for (const id of fromSet) {
     if (toSet.has(id)) continue;
-    if (opts.removalSuppressed) continue;
     const item = opts.fromById.get(id);
-    opts.pushChange({
-      id: changeId({
-        category: opts.disappearedCategory,
+    const chgId = changeId({
+      category: opts.disappearedCategory,
+      evidenceCategory: opts.categoryName,
+      path: item.pathNormalized || item.path,
+      method: item.method,
+      evidenceId: id,
+      property: opts.disappearedVerb,
+    });
+    if (!opts.disappearanceConclusionsAllowed) {
+      opts.suppress({
+        id: chgId,
+        proposedCategory: opts.disappearedCategory,
+        reason:
+          'Disappearance depends on absence from TO; TO inventory is not complete enough',
+        incompleteObservation: opts.incompleteSideForDisappearance(),
         evidenceCategory: opts.categoryName,
         path: item.pathNormalized || item.path,
         method: item.method,
-        evidenceId: id,
-        property: opts.disappearedVerb,
-      }),
+        fromEvidenceId: id,
+        details: { verb: opts.disappearedVerb },
+      });
+      continue;
+    }
+    opts.pushChange({
+      id: chgId,
       category: opts.disappearedCategory,
+      kind: CHANGE_KIND.ATOMIC,
       evidenceCategory: opts.categoryName,
       summary: opts.isWeak
         ? `Weaker ${opts.categoryName} evidence disappeared from the frontend. Not a structured operation disappearance.`
@@ -543,12 +744,15 @@ function compareIdSetCategory(opts) {
 }
 
 /**
- * Extra auth-oriented classifications for host:auth and auth-ish structured paths.
  * @param {{
  *   fromById: Map<string, object>,
  *   toById: Map<string, object>,
- *   removalSuppressed: boolean,
+ *   additionConclusionsAllowed: boolean,
+ *   disappearanceConclusionsAllowed: boolean,
+ *   incompleteSideForAddition: () => 'from' | 'to' | 'both',
+ *   incompleteSideForDisappearance: () => 'from' | 'to' | 'both',
  *   pushChange: (c: object) => void,
+ *   suppress: (r: object) => void,
  *   existingIds: Set<string>,
  * }} opts
  */
@@ -567,7 +771,6 @@ function emitAuthSpecificChanges(opts) {
 
   for (const [id, item] of toAuth) {
     if (fromAuth.has(id)) continue;
-    // Prefer dedicated auth category; still ok if weak_reference_added also exists
     const chgId = changeId({
       category: CHANGE_CATEGORY.AUTH_EVIDENCE_CHANGED,
       evidenceCategory: item.category,
@@ -577,9 +780,25 @@ function emitAuthSpecificChanges(opts) {
       property: 'added',
     });
     if (opts.existingIds.has(chgId)) continue;
+    if (!opts.additionConclusionsAllowed) {
+      opts.suppress({
+        id: chgId,
+        proposedCategory: CHANGE_CATEGORY.AUTH_EVIDENCE_CHANGED,
+        reason:
+          'Auth evidence addition depends on absence from FROM; FROM is not complete enough',
+        incompleteObservation: opts.incompleteSideForAddition(),
+        evidenceCategory: item.category,
+        path: item.pathNormalized || item.path,
+        method: item.method,
+        toEvidenceId: id,
+        details: { verb: 'added' },
+      });
+      continue;
+    }
     opts.pushChange({
       id: chgId,
       category: CHANGE_CATEGORY.AUTH_EVIDENCE_CHANGED,
+      kind: CHANGE_KIND.ATOMIC,
       evidenceCategory: item.category,
       summary:
         'Frontend authentication/header-related evidence appeared. ' +
@@ -597,7 +816,6 @@ function emitAuthSpecificChanges(opts) {
 
   for (const [id, item] of fromAuth) {
     if (toAuth.has(id)) continue;
-    if (opts.removalSuppressed) continue;
     const chgId = changeId({
       category: CHANGE_CATEGORY.AUTH_EVIDENCE_CHANGED,
       evidenceCategory: item.category,
@@ -607,9 +825,25 @@ function emitAuthSpecificChanges(opts) {
       property: 'disappeared',
     });
     if (opts.existingIds.has(chgId)) continue;
+    if (!opts.disappearanceConclusionsAllowed) {
+      opts.suppress({
+        id: chgId,
+        proposedCategory: CHANGE_CATEGORY.AUTH_EVIDENCE_CHANGED,
+        reason:
+          'Auth evidence disappearance depends on absence from TO; TO is not complete enough',
+        incompleteObservation: opts.incompleteSideForDisappearance(),
+        evidenceCategory: item.category,
+        path: item.pathNormalized || item.path,
+        method: item.method,
+        fromEvidenceId: id,
+        details: { verb: 'disappeared' },
+      });
+      continue;
+    }
     opts.pushChange({
       id: chgId,
       category: CHANGE_CATEGORY.AUTH_EVIDENCE_CHANGED,
+      kind: CHANGE_KIND.ATOMIC,
       evidenceCategory: item.category,
       summary:
         'Frontend authentication/header-related evidence disappeared. ' +
@@ -629,7 +863,12 @@ function emitAuthSpecificChanges(opts) {
 /** @param {object} item */
 function isAuthRelatedItem(item) {
   const kind = String(item.structuralKind || '');
-  if (kind === 'host:auth' || kind.includes('auth') || kind.includes('oauth') || kind.includes('dpop')) {
+  if (
+    kind === 'host:auth' ||
+    kind.includes('auth') ||
+    kind.includes('oauth') ||
+    kind.includes('dpop')
+  ) {
     return true;
   }
   const p = String(item.pathNormalized || item.path || '').toLowerCase();
@@ -649,19 +888,9 @@ function provenancePathSet(provenance) {
   /** @type {Set<string>} */
   const set = new Set();
   for (const p of provenance || []) {
-    if (p?.sourcePath) set.add(normalizeChunkPathForCompare(p.sourcePath));
+    if (p?.sourcePath) set.add(String(p.sourcePath));
   }
   return set;
-}
-
-/**
- * Normalize hashed chunk filenames for rename detection helpers.
- * We still treat path-set inequality as provenance_moved; this helper
- * strips nothing semantic — kept for future rename equivalence if needed.
- * @param {string} sourcePath
- */
-function normalizeChunkPathForCompare(sourcePath) {
-  return String(sourcePath);
 }
 
 /** @param {object[] | null | undefined} provenance */
@@ -671,25 +900,65 @@ function sanitizeProvenance(provenance) {
     sourcePath: p.sourcePath,
     sourceSha256: p.sourceSha256,
     role: p.role,
-    // offsets/snippets kept as citation metadata only — not identity
     byteOffset: p.byteOffset,
     endOffset: p.endOffset,
     snippet: p.snippet,
   }));
 }
 
-/** @param {object[]} changes */
-function countByCategory(changes) {
+/**
+ * @param {object[]} changes
+ * @param {object[]} suppressedChanges
+ */
+function buildCounts(changes, suppressedChanges) {
   /** @type {Record<string, number>} */
-  const counts = {};
+  const byCategory = {};
+  /** @type {Record<string, number>} */
+  const atomic = {};
+  /** @type {Record<string, number>} */
+  const derived = {};
   for (const cat of Object.values(CHANGE_CATEGORY)) {
-    counts[cat] = 0;
+    byCategory[cat] = 0;
+    atomic[cat] = 0;
+    derived[cat] = 0;
   }
+
+  let totalAtomic = 0;
+  let totalDerived = 0;
   for (const c of changes) {
-    counts[c.category] = (counts[c.category] || 0) + 1;
+    byCategory[c.category] = (byCategory[c.category] || 0) + 1;
+    if (c.kind === CHANGE_KIND.DERIVED) {
+      derived[c.category] = (derived[c.category] || 0) + 1;
+      totalDerived += 1;
+    } else {
+      atomic[c.category] = (atomic[c.category] || 0) + 1;
+      totalAtomic += 1;
+    }
   }
-  counts.total = changes.length;
-  return counts;
+
+  /** @type {Record<string, number>} */
+  const suppressedByCategory = {};
+  for (const s of suppressedChanges) {
+    const k = s.proposedCategory || 'unknown';
+    suppressedByCategory[k] = (suppressedByCategory[k] || 0) + 1;
+  }
+
+  return {
+    // Flat category counts = authoritative emitted changes (backward-compatible keys)
+    ...byCategory,
+    byCategory,
+    atomic,
+    derived,
+    totalAtomic,
+    totalDerived,
+    total: changes.length,
+    suppressedTotal: suppressedChanges.length,
+    suppressedByCategory,
+    note:
+      'method_set_changed is derived/grouped over atomic structured_operation add/disappear on the same path. ' +
+      'Reviewers should not treat derived + atomic as independent API changes. ' +
+      'Suppressed conclusions are excluded from totals and listed in suppressedChanges.',
+  };
 }
 
 /** @param {unknown} v */

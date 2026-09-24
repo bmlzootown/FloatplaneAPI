@@ -24,14 +24,17 @@ make frontend-evidence-diff-test
 - TV + web route roots on the same observation
 - Pre-promote inventory invariants
 
-## Phase 2.2
+## Phase 2.2 / 2.2.1
 
-- Completeness gating + removal suppression (`removalSuppressed`)
-- Structured op add/disappear / method-set / provenance_moved
+- **Directional** completeness gating: additions need FROM complete; disappearances need TO complete; method-set needs both
+- `additionConclusionsAllowed` / `disappearanceConclusionsAllowed` / `methodSetConclusionsAllowed` + `suppressedChanges[]`
+- Structured op add/disappear / method-set (derived) / provenance_moved
 - Request / auth / response-mapper / realtime / weak categories (weak never promoted)
-- Frontend-churn suppression (offset, minify, dup provenance, same-path moves ≠ API change)
+- Frontend-churn suppression (hash rename path moves as provenance only; offsets/minify/dup provenance suppressed)
+- Atomic vs derived counts (`totalAtomic` / `totalDerived`) — do not triple-count method-set with add/disappear
 - Outputs under `phase2/diffs/{fromObservationId}/` on the **TO** observation only
 - Idempotent transactional promote; source inventories never mutated
+- Comparator `2.2.1`, diff schema v2
 
 ## Outputs
 
@@ -44,7 +47,7 @@ Under `artifacts/frontend/{buildId}/{observationId}/phase2/`:
 | `chunks/js/*.js` | Archived lazy JS bytes (Phase 2.1: all reachable) |
 | `api-evidence.json` | Versioned machine-readable evidence inventory (schema v2) |
 | `api-evidence.inventory.md` | Human review table (METHOD PATH SOURCE) |
-| `diffs/{fromObs}/evidence-diff.json` | Phase 2.2 machine diff (schema v1) |
+| `diffs/{fromObs}/evidence-diff.json` | Phase 2.2 machine diff (schema v2) |
 | `diffs/{fromObs}/evidence-diff.md` | Phase 2.2 human report |
 | `diffs/{fromObs}/status.json` | Diff promote fingerprint |
 

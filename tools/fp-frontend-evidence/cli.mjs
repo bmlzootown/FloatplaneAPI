@@ -174,8 +174,12 @@ function emitDiffResult(result, args, repoRoot) {
           fromBuildId: result.from.buildId,
           toBuildId: result.to.buildId,
           comparisonStatus: result.diff.comparisonStatus,
+          additionConclusionsAllowed: result.diff.additionConclusionsAllowed,
+          disappearanceConclusionsAllowed: result.diff.disappearanceConclusionsAllowed,
+          methodSetConclusionsAllowed: result.diff.methodSetConclusionsAllowed,
           removalSuppressed: result.diff.removalSuppressed,
           counts: result.diff.counts,
+          suppressedTotal: result.diff.counts?.suppressedTotal ?? 0,
           outDir: result.outDir ? path.relative(repoRoot, result.outDir) : null,
           labelAsReal: result.diff.labelAsReal,
           comparator: `${COMPARATOR_ID}@${COMPARATOR_VERSION}`,
@@ -198,15 +202,22 @@ function emitDiffResult(result, args, repoRoot) {
   );
   console.log(`Idempotent:    ${result.idempotent ? 'yes' : 'no'}`);
   console.log(`Status:        ${result.diff.comparisonStatus}`);
-  console.log(`Removals suppressed: ${result.diff.removalSuppressed ? 'yes' : 'no'}`);
+  console.log(
+    `Additions allowed:      ${result.diff.additionConclusionsAllowed ? 'yes' : 'no'} (needs FROM complete)`,
+  );
+  console.log(
+    `Disappearances allowed: ${result.diff.disappearanceConclusionsAllowed ? 'yes' : 'no'} (needs TO complete)`,
+  );
+  console.log(
+    `Method-set allowed:     ${result.diff.methodSetConclusionsAllowed ? 'yes' : 'no'} (needs both complete)`,
+  );
   console.log(`Label as real: ${result.diff.labelAsReal ? 'yes' : 'no (fixture/controlled)'}`);
   if (result.dryRun) console.log(`Dry run:       yes (nothing written)`);
   console.log(``);
   const c = result.diff.counts || {};
-  console.log(`Counts:`);
+  console.log(`Counts (atomic):`);
   console.log(`  structured_operation_added:        ${c.structured_operation_added || 0}`);
   console.log(`  structured_operation_disappeared:  ${c.structured_operation_disappeared || 0}`);
-  console.log(`  method_set_changed:                ${c.method_set_changed || 0}`);
   console.log(`  request_construction_changed:      ${c.request_construction_changed || 0}`);
   console.log(`  auth_evidence_changed:             ${c.auth_evidence_changed || 0}`);
   console.log(`  response_mapper_changed:           ${c.response_mapper_changed || 0}`);
@@ -214,7 +225,12 @@ function emitDiffResult(result, args, repoRoot) {
   console.log(`  weak_reference_added:              ${c.weak_reference_added || 0}`);
   console.log(`  weak_reference_disappeared:        ${c.weak_reference_disappeared || 0}`);
   console.log(`  provenance_moved:                  ${c.provenance_moved || 0}`);
-  console.log(`  total:                             ${c.total || 0}`);
+  console.log(`  atomic total:                      ${c.totalAtomic || 0}`);
+  console.log(`Counts (derived):`);
+  console.log(`  method_set_changed:                ${c.method_set_changed || 0}`);
+  console.log(`  derived total:                     ${c.totalDerived || 0}`);
+  console.log(`  authoritative total:               ${c.total || 0}`);
+  console.log(`  suppressed (indeterminate):        ${c.suppressedTotal || 0}`);
   console.log(``);
   if (result.diff.warnings?.length) {
     console.log(`Warnings:`);

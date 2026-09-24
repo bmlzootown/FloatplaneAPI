@@ -150,6 +150,9 @@ export async function runEvidenceDiff(options) {
   try {
     const status = {
       status: diff.comparisonStatus,
+      additionConclusionsAllowed: diff.additionConclusionsAllowed,
+      disappearanceConclusionsAllowed: diff.disappearanceConclusionsAllowed,
+      methodSetConclusionsAllowed: diff.methodSetConclusionsAllowed,
       removalSuppressed: diff.removalSuppressed,
       refuseRemoval: diff.refuseRemoval,
       comparatorId: COMPARATOR_ID,

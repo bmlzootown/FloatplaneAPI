@@ -152,83 +152,285 @@ describe('structured operation added / disappeared', () => {
   });
 });
 
-describe('completeness / removal suppression (§1)', () => {
-  it('incomplete B suppresses disappearance', () => {
-    const fromItems = baselineItems();
-    const toItems = baselineItems().filter(
-      (i) => i.pathNormalized !== '/api/v3/content/post',
-    );
-    // B also gains an addition to prove additions still report
-    toItems.push(structuredOp({ method: 'GET', path: '/api/v3/user/extra' }));
+describe('directional completeness gating 2.2.1 (matrix)', () => {
+  const pathGone = '/api/v3/content/post';
+  const pathNew = '/api/v3/user/extra';
 
+  function inventory(obsId, items, closureStatus) {
+    return loadedFromDoc(
+      makeEvidenceDoc({
+        observationId: obsId,
+        items,
+        closureStatus,
+        refuseRemoval: closureStatus === 'incomplete',
+      }),
+    );
+  }
+
+  function baseWithOptionalExtra(includeGone, includeNew) {
+    let items = baselineItems();
+    if (!includeGone) {
+      items = items.filter((i) => i.pathNormalized !== pathGone);
+    }
+    if (includeNew) {
+      items = [...items, structuredOp({ method: 'GET', path: pathNew })];
+    }
+    return items;
+  }
+
+  // --- Additions 1–4 ---
+  it('1. A complete, B complete → addition allowed', () => {
     const diff = compareEvidenceInventories({
-      from: loadedFromDoc(
-        makeEvidenceDoc({ observationId: 'a', items: fromItems, closureStatus: 'complete' }),
-      ),
-      to: loadedFromDoc(
-        makeEvidenceDoc({
-          observationId: 'b',
-          items: toItems,
-          closureStatus: 'incomplete',
-          refuseRemoval: true,
-        }),
-      ),
+      from: inventory('a', baseWithOptionalExtra(true, false), 'complete'),
+      to: inventory('b', baseWithOptionalExtra(true, true), 'complete'),
       labelAsReal: false,
     });
-    assert.equal(diff.comparisonStatus, COMPARISON_STATUS.INCOMPLETE);
-    assert.equal(diff.removalSuppressed, true);
-    assert.equal(diff.counts.structured_operation_disappeared, 0);
+    assert.equal(diff.additionConclusionsAllowed, true);
     assert.equal(diff.counts.structured_operation_added, 1);
-    assert.ok(diff.warnings.some((w) => /Removal conclusions suppressed/i.test(w)));
+    assert.equal(diff.counts.suppressedTotal, 0);
   });
 
-  it('incomplete A suppresses disappearance and marks incomplete', () => {
-    const fromItems = baselineItems();
-    const toItems = baselineItems().filter(
-      (i) => i.pathNormalized !== '/api/v3/content/post',
-    );
+  it('2. A complete, B incomplete → addition allowed when positively present in B', () => {
     const diff = compareEvidenceInventories({
-      from: loadedFromDoc(
-        makeEvidenceDoc({
-          observationId: 'a',
-          items: fromItems,
-          closureStatus: 'incomplete',
-          refuseRemoval: true,
-        }),
+      from: inventory('a', baseWithOptionalExtra(true, false), 'complete'),
+      to: inventory('b', baseWithOptionalExtra(true, true), 'incomplete'),
+      labelAsReal: false,
+    });
+    assert.equal(diff.additionConclusionsAllowed, true);
+    assert.equal(diff.disappearanceConclusionsAllowed, false);
+    assert.equal(diff.counts.structured_operation_added, 1);
+    assert.ok(
+      !diff.suppressedChanges.some(
+        (s) => s.proposedCategory === CHANGE_CATEGORY.STRUCTURED_OPERATION_ADDED,
       ),
-      to: loadedFromDoc(
-        makeEvidenceDoc({ observationId: 'b', items: toItems, closureStatus: 'complete' }),
+    );
+  });
+
+  it('3. A incomplete, B complete → addition suppressed', () => {
+    const diff = compareEvidenceInventories({
+      from: inventory('a', baseWithOptionalExtra(true, false), 'incomplete'),
+      to: inventory('b', baseWithOptionalExtra(true, true), 'complete'),
+      labelAsReal: false,
+    });
+    assert.equal(diff.additionConclusionsAllowed, false);
+    assert.equal(diff.counts.structured_operation_added, 0);
+    assert.ok(
+      diff.suppressedChanges.some(
+        (s) =>
+          s.proposedCategory === CHANGE_CATEGORY.STRUCTURED_OPERATION_ADDED &&
+          (s.incompleteObservation === 'from' || s.incompleteObservation === 'both'),
+      ),
+    );
+    assert.ok(!diff.changes.some((c) => c.category === CHANGE_CATEGORY.STRUCTURED_OPERATION_ADDED));
+  });
+
+  it('4. A incomplete, B incomplete → addition suppressed', () => {
+    const diff = compareEvidenceInventories({
+      from: inventory('a', baseWithOptionalExtra(true, false), 'incomplete'),
+      to: inventory('b', baseWithOptionalExtra(true, true), 'incomplete'),
+      labelAsReal: false,
+    });
+    assert.equal(diff.additionConclusionsAllowed, false);
+    assert.equal(diff.counts.structured_operation_added, 0);
+    assert.ok(
+      diff.suppressedChanges.some(
+        (s) => s.proposedCategory === CHANGE_CATEGORY.STRUCTURED_OPERATION_ADDED,
+      ),
+    );
+  });
+
+  // --- Disappearances 5–8 ---
+  it('5. A complete, B complete → disappearance allowed', () => {
+    const diff = compareEvidenceInventories({
+      from: inventory('a', baseWithOptionalExtra(true, false), 'complete'),
+      to: inventory('b', baseWithOptionalExtra(false, false), 'complete'),
+      labelAsReal: false,
+    });
+    assert.equal(diff.disappearanceConclusionsAllowed, true);
+    assert.equal(diff.counts.structured_operation_disappeared, 1);
+  });
+
+  it('6. A incomplete, B complete → disappearance allowed when positively observed in A', () => {
+    const diff = compareEvidenceInventories({
+      from: inventory('a', baseWithOptionalExtra(true, false), 'incomplete'),
+      to: inventory('b', baseWithOptionalExtra(false, false), 'complete'),
+      labelAsReal: false,
+    });
+    assert.equal(diff.disappearanceConclusionsAllowed, true);
+    assert.equal(diff.additionConclusionsAllowed, false);
+    assert.equal(diff.counts.structured_operation_disappeared, 1);
+    assert.ok(
+      !diff.suppressedChanges.some(
+        (s) => s.proposedCategory === CHANGE_CATEGORY.STRUCTURED_OPERATION_DISAPPEARED,
+      ),
+    );
+  });
+
+  it('7. A complete, B incomplete → disappearance suppressed', () => {
+    const diff = compareEvidenceInventories({
+      from: inventory('a', baseWithOptionalExtra(true, false), 'complete'),
+      to: inventory('b', baseWithOptionalExtra(false, true), 'incomplete'),
+      labelAsReal: false,
+    });
+    assert.equal(diff.disappearanceConclusionsAllowed, false);
+    assert.equal(diff.additionConclusionsAllowed, true);
+    assert.equal(diff.counts.structured_operation_disappeared, 0);
+    assert.equal(diff.counts.structured_operation_added, 1); // addition still ok
+    assert.ok(
+      diff.suppressedChanges.some(
+        (s) =>
+          s.proposedCategory === CHANGE_CATEGORY.STRUCTURED_OPERATION_DISAPPEARED &&
+          (s.incompleteObservation === 'to' || s.incompleteObservation === 'both'),
+      ),
+    );
+    assert.match(
+      renderEvidenceDiffMarkdown(diff),
+      /TO incomplete/i,
+    );
+    assert.doesNotMatch(
+      renderEvidenceDiffMarkdown(diff),
+      /Removal conclusions suppressed/i,
+    );
+  });
+
+  it('8. A incomplete, B incomplete → disappearance suppressed', () => {
+    const diff = compareEvidenceInventories({
+      from: inventory('a', baseWithOptionalExtra(true, false), 'incomplete'),
+      to: inventory('b', baseWithOptionalExtra(false, false), 'incomplete'),
+      labelAsReal: false,
+    });
+    assert.equal(diff.disappearanceConclusionsAllowed, false);
+    assert.equal(diff.counts.structured_operation_disappeared, 0);
+    assert.ok(
+      diff.suppressedChanges.some(
+        (s) => s.proposedCategory === CHANGE_CATEGORY.STRUCTURED_OPERATION_DISAPPEARED,
+      ),
+    );
+  });
+
+  // --- Method sets 9–11 ---
+  it('9. both complete → method_set_changed emitted as derived alongside atomic facts', () => {
+    const diff = compareEvidenceInventories({
+      from: inventory(
+        'a',
+        [structuredOp({ method: 'GET', path: '/api/v3/foo' })],
+        'complete',
+      ),
+      to: inventory(
+        'b',
+        [structuredOp({ method: 'POST', path: '/api/v3/foo' })],
+        'complete',
       ),
       labelAsReal: false,
     });
-    assert.equal(diff.removalSuppressed, true);
-    assert.equal(diff.counts.structured_operation_disappeared, 0);
+    assert.equal(diff.methodSetConclusionsAllowed, true);
+    assert.equal(diff.counts.structured_operation_added, 1);
+    assert.equal(diff.counts.structured_operation_disappeared, 1);
+    assert.equal(diff.counts.method_set_changed, 1);
+    assert.equal(diff.counts.totalAtomic, 2);
+    assert.equal(diff.counts.totalDerived, 1);
+    const msc = diff.changes.find(
+      (c) => c.category === CHANGE_CATEGORY.METHOD_SET_CHANGED,
+    );
+    assert.equal(msc.kind, 'derived');
   });
 
-  it('complete_with_external_rejects allows full compare', () => {
+  it('10. incomplete A → method_set suppressed; positive disappearance retained', () => {
+    const diff = compareEvidenceInventories({
+      from: inventory(
+        'a',
+        [structuredOp({ method: 'GET', path: '/api/v3/foo' })],
+        'incomplete',
+      ),
+      to: inventory(
+        'b',
+        [structuredOp({ method: 'POST', path: '/api/v3/foo' })],
+        'complete',
+      ),
+      labelAsReal: false,
+    });
+    assert.equal(diff.methodSetConclusionsAllowed, false);
+    assert.equal(diff.counts.method_set_changed, 0);
+    assert.equal(diff.counts.structured_operation_disappeared, 1); // B complete
+    assert.equal(diff.counts.structured_operation_added, 0); // A incomplete
+    assert.ok(
+      diff.suppressedChanges.some(
+        (s) => s.proposedCategory === CHANGE_CATEGORY.METHOD_SET_CHANGED,
+      ),
+    );
+    assert.ok(
+      diff.suppressedChanges.some(
+        (s) => s.proposedCategory === CHANGE_CATEGORY.STRUCTURED_OPERATION_ADDED,
+      ),
+    );
+  });
+
+  it('11. incomplete B → method_set suppressed; positive addition retained', () => {
+    const diff = compareEvidenceInventories({
+      from: inventory(
+        'a',
+        [structuredOp({ method: 'GET', path: '/api/v3/foo' })],
+        'complete',
+      ),
+      to: inventory(
+        'b',
+        [structuredOp({ method: 'POST', path: '/api/v3/foo' })],
+        'incomplete',
+      ),
+      labelAsReal: false,
+    });
+    assert.equal(diff.methodSetConclusionsAllowed, false);
+    assert.equal(diff.counts.method_set_changed, 0);
+    assert.equal(diff.counts.structured_operation_added, 1);
+    assert.equal(diff.counts.structured_operation_disappeared, 0);
+    assert.ok(
+      diff.suppressedChanges.some(
+        (s) => s.proposedCategory === CHANGE_CATEGORY.METHOD_SET_CHANGED,
+      ),
+    );
+  });
+
+  // --- Presence-to-presence 12 ---
+  it('12. positive-to-positive request change reportable even if unrelated side incomplete', () => {
+    const fromItems = [
+      structuredOp({
+        method: 'GET',
+        path: '/api/v3/user/subscriptions',
+        request: { hasQuery: false, hasBody: false, hasHeaders: true },
+      }),
+    ];
+    const toItems = [
+      structuredOp({
+        method: 'GET',
+        path: '/api/v3/user/subscriptions',
+        request: { hasQuery: true, hasBody: false, hasHeaders: true },
+      }),
+    ];
+    // FROM incomplete, TO complete — addition/disappearance gated, but matched-id field change OK
+    const diff = compareEvidenceInventories({
+      from: inventory('a', fromItems, 'incomplete'),
+      to: inventory('b', toItems, 'complete'),
+      labelAsReal: false,
+    });
+    assert.equal(diff.counts.request_construction_changed, 1);
+    assert.equal(diff.changes[0].details.presenceToPresence, true);
+    assert.equal(diff.counts.suppressedTotal, 0);
+  });
+
+  it('complete_with_external_rejects counts as complete enough (both directions)', () => {
     const items = baselineItems();
     const diff = compareEvidenceInventories({
-      from: loadedFromDoc(
-        makeEvidenceDoc({
-          observationId: 'a',
-          items,
-          closureStatus: 'complete_with_external_rejects',
-        }),
-      ),
-      to: loadedFromDoc(
-        makeEvidenceDoc({
-          observationId: 'b',
-          items: [
-            ...items,
-            structuredOp({ method: 'POST', path: '/api/v3/user/extra' }),
-          ],
-          closureStatus: 'complete_with_external_rejects',
-        }),
+      from: inventory('a', items, 'complete_with_external_rejects'),
+      to: inventory(
+        'b',
+        [...items, structuredOp({ method: 'POST', path: '/api/v3/user/extra' })],
+        'complete_with_external_rejects',
       ),
       labelAsReal: false,
     });
     assert.equal(diff.comparisonStatus, COMPARISON_STATUS.COMPLETE);
-    assert.equal(diff.removalSuppressed, false);
+    assert.equal(diff.additionConclusionsAllowed, true);
+    assert.equal(diff.disappearanceConclusionsAllowed, true);
     assert.equal(diff.counts.structured_operation_added, 1);
   });
 });
@@ -580,13 +782,17 @@ describe('markdown report structure (§11)', () => {
     for (const heading of [
       '# Floatplane Frontend API Evidence Changes',
       '## Extraction status',
+      '### Directional gating (2.2.1)',
       '## Summary',
-      '## Structured operation changes',
+      '### Atomic (primary facts)',
+      '### Derived (grouped — do not triple-count with atomic)',
+      '## Structured operation changes (atomic + derived)',
       '## Request behavior changes',
       '## Authentication/header changes',
       '## Realtime changes',
       '## Weaker/ambiguous evidence',
       '## Frontend-only movement',
+      '## Suppressed / indeterminate',
       '## Warnings / limitations',
     ]) {
       assert.ok(md.includes(heading), `missing ${heading}`);
