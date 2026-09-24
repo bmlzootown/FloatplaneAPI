@@ -8,7 +8,8 @@ node tools/fp-frontend-watch/cli.mjs check
 node --test tests/frontend-watch/frontend-watch.test.mjs tests/frontend-watch/monitor-orchestrate.test.mjs
 
 # Phase 1.2 — cumulative pending ledger decision JSON (refreshes origin/main first)
-node tools/fp-frontend-watch/monitor-orchestrate.mjs --json --run-tests
+node tools/fp-frontend-watch/monitor-orchestrate.mjs --json
+# Optional local/CI: add --run-tests (not used on scheduled Automation cycles)
 ```
 
 Layout: `artifacts/frontend/{buildId}/{observationId}/` with content-derived observation IDs, transactional staging→promote, durable in-repo entry/manifest bytes, HTTP timeouts, and lineage via `previousObservationId`.

@@ -101,7 +101,8 @@ make frontend-check-json
 
 # Phase 1.2 — orchestration decision for Cursor Automation
 make frontend-monitor-json
-# or: node tools/fp-frontend-watch/monitor-orchestrate.mjs --json --run-tests
+# or: node tools/fp-frontend-watch/monitor-orchestrate.mjs --json
+# (offline tests: make frontend-watch-test — local/CI only, not every cron cycle)
 ```
 
 **Exit codes:** `0` unchanged · `1` operational failure · `2` change detected (new build id or same id with different compared SHA-256 set).

@@ -14,21 +14,17 @@ Repository: `bmlzootown/FloatplaneAPI`. Configured start branch may be `main`, b
 - **Cumulative pending ledger:** `main` = authoritative merged history; `cursor/frontend-observation` = durable pending A→B→C while a monitoring PR is open.
 - **Never** force-reset the monitoring branch from `main` while it has pending observation commits absent from `main`.
 - Never claim that the Floatplane API changed.
+- Do **not** run `make frontend-watch-test` or pass `--run-tests` on routine scheduled cycles. Offline tests are a local/CI requirement only.
 
 ## Procedure (every run)
 
 1. Ensure a clean worktree (`git status` clean). If dirty, abort and report.
-2. Run offline unit tests:
+2. Refresh SCM and run the orchestrator (preferred — refreshes refs, prepares baseline, runs watcher, emits decision):
    ```sh
-   make frontend-watch-test
+   node tools/fp-frontend-watch/monitor-orchestrate.mjs --json
    ```
-   On failure: stop. No observation PR/commit.
-3. Run the orchestrator (preferred — refreshes refs, prepares baseline, runs watcher, emits decision):
-   ```sh
-   node tools/fp-frontend-watch/monitor-orchestrate.mjs --json --run-tests
-   ```
-   `--with-gh` is **optional** and must not be required for correctness. Prefer Cursor native GitHub/PR tools for opening/updating the PR.
-4. Follow the decision JSON exactly.
+   Do **not** add `--run-tests`. `--with-gh` is **optional** and must not be required for correctness. Prefer Cursor native GitHub/PR tools for opening/updating the PR.
+3. Follow the decision JSON exactly.
 
 ### What the orchestrator already does
 

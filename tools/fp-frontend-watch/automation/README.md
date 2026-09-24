@@ -42,11 +42,19 @@ resource "cursor_platform_workflow" "floatplane_frontend_watch" {
 }
 ```
 
-## Local commands
+## Scheduled vs local
+
+- **Scheduled Automation** (every 6h): refresh SCM via the orchestrator, then
+  `node tools/fp-frontend-watch/monitor-orchestrate.mjs --json` (no `--run-tests`).
+  Follow the decision JSON. Do not run offline tests every cycle.
+- **Local / CI:** `make frontend-watch-test` (or `--run-tests`) remains required before
+  merging orchestration changes. Not part of the routine cron path.
 
 ```sh
+# Offline tests (local/CI only)
 make frontend-watch-test
+
+# Same command the Automation should use
 make frontend-monitor-json
-# or:
-node tools/fp-frontend-watch/monitor-orchestrate.mjs --json --run-tests
+# or: node tools/fp-frontend-watch/monitor-orchestrate.mjs --json
 ```
