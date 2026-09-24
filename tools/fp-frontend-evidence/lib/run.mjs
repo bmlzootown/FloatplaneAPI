@@ -1,8 +1,9 @@
 /**
- * Phase 2.1 orchestration: BFS chunk collection + evidence extraction.
+ * Phase 2.1.1 orchestration: BFS chunk collection + evidence extraction.
  *
  * - Idempotent for a complete prior run with matching extractor + input hashes
  * - Transactional staging: partial failure does not publish a "complete" inventory
+ * - Pre-promote inventory invariants (fail closed)
  * - Does NOT write Phase 1 LKG state or mutate observation identity
  */
 
@@ -23,8 +24,9 @@ import {
   CHUNKS_SUBDIR,
   USER_AGENT,
   EXIT,
+  CLOSURE_STATUS,
 } from './constants.mjs';
-import { scanChunkDependencies, chunkUrlFor } from './discover-chunks.mjs';
+import { scanChunkDependencies, chunkUrlFor, resolveChunkSpecifier } from './discover-chunks.mjs';
 import {
   extractEvidenceFromSource,
   dedupeAndSortEvidence,
@@ -32,6 +34,9 @@ import {
 } from './extract.mjs';
 import { renderInventoryMarkdown } from './inventory.mjs';
 import { resolveObservation } from './resolve-observation.mjs';
+import { IDENTITY_RULES } from './normalize.mjs';
+import { assertValidEvidenceInventory } from './validate.mjs';
+import { discoverFrontendRoots } from './frontend-roots.mjs';
 
 /**
  * @param {{
@@ -42,7 +47,6 @@ import { resolveObservation } from './resolve-observation.mjs';
  *   buildId?: string | null,
  *   fetchImpl?: import('../../fp-frontend-watch/lib/fetch-artifact.mjs').FetchLike,
  *   localBodies?: Record<string, Buffer | string>,
- *   // localBodies: preloaded bodies keyed by relative path (offline tests)
  *   dryRun?: boolean,
  *   force?: boolean,
  *   now?: Date,
@@ -76,8 +80,13 @@ export async function runFrontendEvidence(options) {
   if (!options.force && (await exists(statusPath))) {
     try {
       const prev = JSON.parse(await readFile(statusPath, 'utf8'));
+      const completeStatuses = new Set([
+        CLOSURE_STATUS.COMPLETE,
+        CLOSURE_STATUS.COMPLETE_WITH_EXTERNAL_REJECTS,
+        'complete',
+      ]);
       if (
-        prev.status === 'complete' &&
+        completeStatuses.has(prev.status) &&
         prev.extractorId === EXTRACTOR_ID &&
         prev.extractorVersion === EXTRACTOR_VERSION &&
         prev.entrySha256 === entryHash &&
@@ -130,12 +139,16 @@ export async function runFrontendEvidence(options) {
       rejectedSignals: planned.rejectedSignals,
       warnings: planned.warnings,
       now,
+      closure: planned.chunkGraph.closure,
     });
     return {
-      ok: true,
+      ok: planned.chunkGraph.closure.status !== CLOSURE_STATUS.INCOMPLETE,
       idempotent: false,
       dryRun: true,
-      exitCode: EXIT.SUCCESS,
+      exitCode:
+        planned.chunkGraph.closure.status === CLOSURE_STATUS.INCOMPLETE
+          ? EXIT.INCOMPLETE
+          : EXIT.SUCCESS,
       observationId,
       buildId,
       observationDir,
@@ -146,7 +159,6 @@ export async function runFrontendEvidence(options) {
     };
   }
 
-  // Transactional staging under artifacts/.staging/phase2-…
   const stagingRoot = path.join(options.artifactsRoot, '.staging');
   const stagingDir = path.join(
     stagingRoot,
@@ -170,11 +182,13 @@ export async function runFrontendEvidence(options) {
       now,
     });
 
-    if (collected.chunkGraph.collectionStatus !== 'complete') {
-      // Write incomplete status only into staging; do not promote as complete.
+    const closureStatus = collected.chunkGraph.closure.status;
+
+    if (closureStatus === CLOSURE_STATUS.INCOMPLETE) {
       const incompleteStatus = {
-        status: 'incomplete',
+        status: CLOSURE_STATUS.INCOMPLETE,
         reason: collected.chunkGraph.incompleteReason || 'chunk_collection_incomplete',
+        refuseRemoval: true,
         observationId,
         buildId,
         extractorId: EXTRACTOR_ID,
@@ -183,6 +197,8 @@ export async function runFrontendEvidence(options) {
         entrySha256: entryHash,
         updatedAt: now.toISOString(),
         errors: collected.chunkGraph.errors || [],
+        closure: collected.chunkGraph.closure,
+        frontendRoots: collected.chunkGraph.frontendRoots,
       };
       await writeFile(
         path.join(stagingDir, STATUS_FILE),
@@ -192,7 +208,6 @@ export async function runFrontendEvidence(options) {
         path.join(stagingDir, CHUNK_GRAPH_FILE),
         `${JSON.stringify(collected.chunkGraph, null, 2)}\n`,
       );
-      // Promote incomplete marker so operators can see failure, but evidence inventory is absent.
       await rm(phase2Dir, { recursive: true, force: true });
       await mkdir(path.dirname(phase2Dir), { recursive: true });
       await rename(stagingDir, phase2Dir);
@@ -219,7 +234,17 @@ export async function runFrontendEvidence(options) {
       rejectedSignals: collected.rejectedSignals,
       warnings: collected.warnings,
       now,
+      closure: collected.chunkGraph.closure,
     });
+
+    // Fail closed on inventory invariants before promote
+    assertValidEvidenceInventory({
+      evidence,
+      chunkGraph: collected.chunkGraph,
+      archivedBodiesByPath: collected.bodiesByPath,
+      sha256Fn: sha256,
+    });
+
     const inventory = renderInventoryMarkdown({
       observationId,
       buildId,
@@ -238,7 +263,8 @@ export async function runFrontendEvidence(options) {
     await writeFile(path.join(stagingDir, INVENTORY_FILE), inventory);
 
     const status = {
-      status: 'complete',
+      status: closureStatus,
+      refuseRemoval: false,
       observationId,
       buildId,
       extractorId: EXTRACTOR_ID,
@@ -249,13 +275,14 @@ export async function runFrontendEvidence(options) {
       extractedAt: evidence.extractedAt,
       updatedAt: now.toISOString(),
       metrics: summarizeMetrics(collected.chunkGraph, evidence),
+      closure: collected.chunkGraph.closure,
+      frontendRoots: collected.chunkGraph.frontendRoots,
     };
     await writeFile(
       path.join(stagingDir, STATUS_FILE),
       `${JSON.stringify(status, null, 2)}\n`,
     );
 
-    // Atomic promote: replace prior phase2/ if any
     const backupDir = `${phase2Dir}.bak-${process.pid}-${Date.now()}`;
     let hadPrior = await exists(phase2Dir);
     if (hadPrior) {
@@ -273,7 +300,6 @@ export async function runFrontendEvidence(options) {
       await rm(backupDir, { recursive: true, force: true }).catch(() => {});
     }
 
-    // Phase 1 observation identity untouched; optional note only in return value.
     void observation;
 
     return {
@@ -295,8 +321,6 @@ export async function runFrontendEvidence(options) {
 }
 
 /**
- * BFS reachable JS from entry; optionally fetch+persist chunk bytes.
- *
  * @param {{
  *   entryPath: string,
  *   entryBody: Buffer,
@@ -334,6 +358,8 @@ async function collectChunkGraph(opts) {
   const errors = [];
   /** @type {object[]} */
   const rejectedCrossOrigin = [];
+  /** @type {object[]} */
+  const invalidNonJs = [];
   /** @type {import('./extract.mjs').EvidenceItem[]} */
   const allItems = [];
   /** @type {object[]} */
@@ -342,9 +368,19 @@ async function collectChunkGraph(opts) {
   const warnings = [];
   /** @type {object[]} */
   const sourcesForEvidence = [];
+  /** @type {Map<string, Buffer>} */
+  const bodies = new Map();
+  let depsDiscovered = 0;
+  let duplicateRefs = 0;
+  let parseFailures = 0;
+
+  const entryText = entryBody.toString('utf8');
+  const rootsMeta = discoverFrontendRoots(entryText, entryPath, resolveChunkSpecifier);
 
   function enqueue(relPath, discovery) {
+    depsDiscovered += 1;
     if (assets.has(relPath)) {
+      duplicateRefs += 1;
       const existing = assets.get(relPath);
       mergeDiscovery(existing, discovery);
       return;
@@ -354,19 +390,36 @@ async function collectChunkGraph(opts) {
       rejectedCrossOrigin.push({
         relativePath: relPath,
         reason: urlResult.reason,
+        classification: 'out_of_build_root',
+        whyNotFollowed: urlResult.reason,
         url: urlResult.url || null,
+        fetched: false,
+        parserFailure: false,
         via: discovery,
       });
       return;
     }
+
+    const isJs = relPath.endsWith('.js');
+    const isCss = relPath.endsWith('.css');
+    if (!isJs && !isCss) {
+      invalidNonJs.push({
+        relativePath: relPath,
+        reason: 'unsupported_extension',
+        whyNotFollowed: 'not_js_or_css',
+        via: discovery,
+      });
+      return;
+    }
+
     assets.set(relPath, {
       relativePath: relPath,
       url: urlResult.url,
       sha256: null,
       bytes: null,
-      contentType: relPath.endsWith('.js')
+      contentType: isJs
         ? 'application/javascript'
-        : relPath.endsWith('.css')
+        : isCss
           ? 'text/css'
           : null,
       role: relPath === entryPath ? 'entry' : 'lazy',
@@ -380,16 +433,12 @@ async function collectChunkGraph(opts) {
       apiEvidenceFound: null,
       fetchStatus: relPath === entryPath ? 'local_entry' : 'pending',
     });
-    if (relPath.endsWith('.js')) {
+    if (isJs) {
       queue.push(relPath);
     }
   }
 
   enqueue(entryPath, { kind: 'phase1_entry', importer: null });
-
-  // Seed body map
-  /** @type {Map<string, Buffer>} */
-  const bodies = new Map();
   bodies.set(entryPath, entryBody);
 
   while (queue.length > 0) {
@@ -426,7 +475,6 @@ async function collectChunkGraph(opts) {
     asset.sha256 = sha256(body);
     asset.bytes = body.length;
 
-    // Archive lazy JS bytes (entry already in Phase 1 path)
     if (persistBytes && rel !== entryPath && rel.endsWith('.js') && stagingChunksDir) {
       const destRel = path.posix.join(CHUNKS_SUBDIR, rel);
       const destAbs = path.join(stagingChunksDir, ...rel.split('/'));
@@ -439,12 +487,12 @@ async function collectChunkGraph(opts) {
       asset.archivedRelativePath = entryPath;
     }
 
-    // Scan deps + extract evidence from JS
     if (rel.endsWith('.js')) {
       let text;
       try {
         text = body.toString('utf8');
       } catch {
+        parseFailures += 1;
         warnings.push(`Failed to decode UTF-8 for ${rel}; skipped extract`);
         continue;
       }
@@ -453,6 +501,7 @@ async function collectChunkGraph(opts) {
       try {
         scan = scanChunkDependencies(text, rel);
       } catch (err) {
+        parseFailures += 1;
         warnings.push(
           `Dependency scan failed for ${rel}: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -477,6 +526,7 @@ async function collectChunkGraph(opts) {
           role: asset.role,
         });
       } catch (err) {
+        parseFailures += 1;
         warnings.push(
           `Evidence extract failed for ${rel}: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -508,7 +558,85 @@ async function collectChunkGraph(opts) {
     .reduce((sum, a) => sum + (a.bytes || 0), 0);
 
   const fetchErrors = jsAssets.filter((a) => a.fetchStatus === 'error');
-  const collectionStatus = fetchErrors.length > 0 || errors.length > 0 ? 'incomplete' : 'complete';
+  const successfullyFetched = jsAssets.filter(
+    (a) =>
+      a.fetchStatus === 'fetched' ||
+      a.fetchStatus === 'local_entry' ||
+      a.fetchStatus === 'local_fixture',
+  ).length;
+
+  // Annotate route roots with fetch status
+  const routeRoots = rootsMeta.routeRoots.map((r) => {
+    const asset = assets.get(r.path);
+    return {
+      ...r,
+      fetchStatus: asset?.fetchStatus || 'missing',
+      sha256: asset?.sha256 || null,
+      bytes: asset?.bytes || null,
+      ok:
+        asset != null &&
+        (asset.fetchStatus === 'fetched' ||
+          asset.fetchStatus === 'local_fixture' ||
+          asset.fetchStatus === 'local_entry'),
+    };
+  });
+  const allRootsOk = routeRoots.every((r) => r.ok);
+
+  const externalRejects = [
+    ...rejectedCrossOrigin.map((r) => ({
+      kind: 'module_dep',
+      ...r,
+    })),
+    ...rejectedSignals.map((r) => ({
+      kind: 'evidence_url',
+      relativePath: null,
+      url: r.raw,
+      reason: r.reason,
+      classification: r.classification || 'out_of_build_root',
+      whyNotFollowed: r.whyNotFollowed || 'cross_origin_vendor_host',
+      host: r.host || null,
+      sourcePath: r.sourcePath,
+      byteOffset: r.byteOffset,
+      fetched: false,
+      parserFailure: r.parserFailure === true,
+    })),
+  ];
+
+  let closureStatus = CLOSURE_STATUS.COMPLETE;
+  let incompleteReason = null;
+  let refuseRemoval = false;
+  let reachedDeterministicClosure = true;
+
+  if (fetchErrors.length > 0 || errors.length > 0 || !allRootsOk) {
+    closureStatus = CLOSURE_STATUS.INCOMPLETE;
+    incompleteReason = !allRootsOk
+      ? 'one_or_more_route_roots_failed'
+      : 'one_or_more_same_build_chunk_fetches_failed';
+    refuseRemoval = true;
+    reachedDeterministicClosure = false;
+  } else if (externalRejects.length > 0) {
+    closureStatus = CLOSURE_STATUS.COMPLETE_WITH_EXTERNAL_REJECTS;
+  }
+
+  const closure = {
+    status: closureStatus,
+    refuseRemoval,
+    reachedDeterministicClosure,
+    depsDiscovered,
+    uniqueSameBuildJs: jsAssets.length,
+    successfullyFetched,
+    duplicateRefs,
+    rejectedExternalCount: externalRejects.length,
+    rejectedExternal: externalRejects,
+    invalidNonJsCount: invalidNonJs.length,
+    invalidNonJs,
+    failedSameBuildRetrievals: fetchErrors.length,
+    failedSameBuildPaths: fetchErrors.map((a) => a.relativePath),
+    parseFailures,
+    evidenceWarnings: warnings.length,
+    phase22Note:
+      'When status is incomplete (refuseRemoval=true), Phase 2.2 must NOT treat missing ops as API removal.',
+  };
 
   const chunkGraph = {
     schemaVersion: CHUNK_GRAPH_SCHEMA_VERSION,
@@ -520,18 +648,21 @@ async function collectChunkGraph(opts) {
     extractedAt: now.toISOString(),
     extractorId: EXTRACTOR_ID,
     extractorVersion: EXTRACTOR_VERSION,
-    collectionStatus,
-    incompleteReason:
-      collectionStatus === 'incomplete' ? 'one_or_more_chunk_fetches_failed' : null,
+    collectionStatus: closureStatus,
+    incompleteReason,
     errors,
     rejectedCrossOrigin,
-    /**
-     * Retention policy note for future API-only retention without schema break:
-     * assets[].bytesArchived + archivedRelativePath already distinguish retained
-     * vs metadata-only. Phase 2.1 retains all reachable JS bytes.
-     */
+    frontendRoots: {
+      entryPath,
+      baseUrl,
+      sameObservation: true,
+      note: rootsMeta.sameObservationNote,
+      routeRoots,
+      allRootsOk,
+    },
+    closure,
     retentionPolicy: {
-      phase: '2.1',
+      phase: '2.1.1',
       retainAllReachableJs: true,
       retainCssBytes: false,
       entryBytesOwnedByPhase1: true,
@@ -543,6 +674,10 @@ async function collectChunkGraph(opts) {
       archivedChunkBytes,
       entryBytes: entryBody.length,
       mapDepsFirstWaveJs: countFirstWaveMapDepsJs(assetList, entryPath),
+      depsDiscovered,
+      duplicateRefs,
+      successfullyFetched,
+      rejectedExternalCount: externalRejects.length,
     },
     assets: assetList,
   };
@@ -553,6 +688,7 @@ async function collectChunkGraph(opts) {
     rejectedSignals,
     warnings,
     sourcesForEvidence,
+    bodiesByPath: bodies,
   };
 }
 
@@ -601,6 +737,7 @@ function mergeDiscovery(asset, discovery) {
  *   rejectedSignals: object[],
  *   warnings: string[],
  *   now: Date,
+ *   closure?: object,
  * }} input
  */
 function buildEvidenceDoc(input) {
@@ -618,10 +755,6 @@ function buildEvidenceDoc(input) {
     extractedAt: input.now.toISOString(),
     extractorId: EXTRACTOR_ID,
     extractorVersion: EXTRACTOR_VERSION,
-    /**
-     * Provenance: observation + extractor identity + source sha256s.
-     * Absent facts stay absent (no invented hosts/methods).
-     */
     provenance: {
       observationId: input.observationId,
       buildId: input.buildId,
@@ -630,28 +763,15 @@ function buildEvidenceDoc(input) {
       evidenceSchemaVersion: EVIDENCE_SCHEMA_VERSION,
       sourceCount: input.sources.length,
     },
-    /**
-     * Identity vs metadata:
-     * - Evidence `id` = category + method + normalized path + structuralContext
-     * - Metadata (byteOffset, snippet, sha256, buildId, timestamps) must not
-     *   change `id` across equivalent semantic extractions.
-     */
-    identityRules: {
-      evidenceIdComponents: [
-        'category',
-        'normalizedMethod',
-        'normalizedPath',
-        'structuralContext',
-      ],
-      metadataExcludedFromId: [
-        'byteOffset',
-        'snippet',
-        'sourceSha256',
-        'buildId',
-        'extractedAt',
-        'filenameHash',
-      ],
-    },
+    identityRules: IDENTITY_RULES,
+    closureSummary: input.closure
+      ? {
+          status: input.closure.status,
+          refuseRemoval: input.closure.refuseRemoval,
+          reachedDeterministicClosure: input.closure.reachedDeterministicClosure,
+          rejectedExternalCount: input.closure.rejectedExternalCount,
+        }
+      : null,
     sources: input.sources.sort((a, b) => a.path.localeCompare(b.path)),
     stats: {
       structuredOperationCount: countStructuredOperations(items),
@@ -659,6 +779,10 @@ function buildEvidenceDoc(input) {
       rejectedSignalCount: input.rejectedSignals.length,
       warningCount: input.warnings.length,
       structuredByMethod: methodCounts,
+      provenanceLocationCount: items.reduce(
+        (n, i) => n + (i.provenance?.length || 0),
+        0,
+      ),
     },
     items,
     rejectedSignals: input.rejectedSignals,
@@ -680,7 +804,18 @@ function summarizeMetrics(chunkGraph, evidence) {
     structuredOperationCount: evidence?.stats?.structuredOperationCount ?? null,
     structuredByMethod: evidence?.stats?.structuredByMethod ?? null,
     rejectedSignalCount: evidence?.stats?.rejectedSignalCount ?? null,
-    collectionStatus: chunkGraph?.collectionStatus ?? null,
+    collectionStatus: chunkGraph?.closure?.status ?? chunkGraph?.collectionStatus ?? null,
+    refuseRemoval: chunkGraph?.closure?.refuseRemoval ?? null,
+    reachedDeterministicClosure: chunkGraph?.closure?.reachedDeterministicClosure ?? null,
+    depsDiscovered: chunkGraph?.closure?.depsDiscovered ?? null,
+    successfullyFetched: chunkGraph?.closure?.successfullyFetched ?? null,
+    duplicateRefs: chunkGraph?.closure?.duplicateRefs ?? null,
+    rejectedExternalCount: chunkGraph?.closure?.rejectedExternalCount ?? null,
+    routeRoots: chunkGraph?.frontendRoots?.routeRoots?.map((r) => ({
+      path: r.path,
+      label: r.label,
+      ok: r.ok,
+    })) ?? null,
   };
 }
 

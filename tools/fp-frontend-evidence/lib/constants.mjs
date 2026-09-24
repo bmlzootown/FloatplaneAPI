@@ -1,9 +1,9 @@
 /** Phase 2.1 frontend evidence extraction — shared constants. */
 
 export const EXTRACTOR_ID = 'phase2.1-frontend-evidence';
-export const EXTRACTOR_VERSION = '2.1.0';
-export const EVIDENCE_SCHEMA_VERSION = 1;
-export const CHUNK_GRAPH_SCHEMA_VERSION = 1;
+export const EXTRACTOR_VERSION = '2.1.1';
+export const EVIDENCE_SCHEMA_VERSION = 2;
+export const CHUNK_GRAPH_SCHEMA_VERSION = 2;
 
 /** Relative directory under an observation for Phase 2 outputs. */
 export const PHASE2_DIR = 'phase2';
@@ -43,6 +43,13 @@ export const REJECTED_API_HOST_PATTERNS = Object.freeze([
 
 export const USER_AGENT =
   'FloatplaneAPIWatch/0.2 (+phase2-frontend-evidence; https://github.com/bmlzootown/FloatplaneAPI)';
+
+/** Closure / collection status values for Phase 2.2 refuse-removal. */
+export const CLOSURE_STATUS = Object.freeze({
+  COMPLETE: 'complete',
+  COMPLETE_WITH_EXTERNAL_REJECTS: 'complete_with_external_rejects',
+  INCOMPLETE: 'incomplete',
+});
 
 export const EXIT = Object.freeze({
   SUCCESS: 0,

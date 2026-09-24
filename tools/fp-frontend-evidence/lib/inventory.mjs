@@ -51,7 +51,9 @@ export function renderInventoryMarkdown(input) {
   lines.push(`| Reachable JS modules | ${chunkGraph.stats?.reachableJsCount ?? '—'} |`);
   lines.push(`| Lazy JS (excl. entry) | ${chunkGraph.stats?.lazyJsCount ?? '—'} |`);
   lines.push(`| JS bytes archived (phase2 chunks) | ${chunkGraph.stats?.archivedChunkBytes ?? '—'} |`);
-  lines.push(`| Collection status | ${chunkGraph.collectionStatus ?? '—'} |`);
+  lines.push(`| Collection status | ${chunkGraph.closure?.status ?? chunkGraph.collectionStatus ?? '—'} |`);
+  lines.push(`| Deterministic closure | ${chunkGraph.closure?.reachedDeterministicClosure ?? '—'} |`);
+  lines.push(`| External rejects | ${chunkGraph.closure?.rejectedExternalCount ?? (evidence.rejectedSignals || []).length} |`);
   lines.push(``);
 
   lines.push(`## Structured operations by method`);
@@ -77,8 +79,13 @@ export function renderInventoryMarkdown(input) {
     return (a.method || '').localeCompare(b.method || '');
   });
   for (const op of sortedOps) {
+    const sources = (op.provenance || [])
+      .map((p) => p.sourcePath)
+      .filter(Boolean);
+    const uniq = [...new Set(sources)];
+    const srcLabel = uniq.length ? uniq.join(', ') : '—';
     lines.push(
-      `| ${op.method} | \`${op.pathNormalized}\` | \`${op.source.path}\` |`,
+      `| ${op.method} | \`${op.pathNormalized}\` | \`${srcLabel}\` |`,
     );
   }
   if (sortedOps.length === 0) {
@@ -93,8 +100,9 @@ export function renderInventoryMarkdown(input) {
     lines.push(`_(none)_`);
   } else {
     for (const r of realtime) {
+      const src = (r.provenance && r.provenance[0]?.sourcePath) || '—';
       lines.push(
-        `- \`${r.method || '—'}\` \`${r.pathNormalized || r.path || '—'}\` (${r.structuralContext}) — \`${r.source.path}\``,
+        `- \`${r.method || '—'}\` \`${r.pathNormalized || r.path || '—'}\` (${r.structuralKind || '—'}) — \`${src}\``,
       );
     }
   }
@@ -105,7 +113,8 @@ export function renderInventoryMarkdown(input) {
     lines.push(`## URL templates`);
     lines.push(``);
     for (const t of templates) {
-      lines.push(`- \`${t.pathNormalized || t.path}\` — \`${t.source.path}\``);
+      const src = (t.provenance && t.provenance[0]?.sourcePath) || '—';
+      lines.push(`- \`${t.pathNormalized || t.path}\` — \`${src}\``);
     }
     lines.push(``);
   }

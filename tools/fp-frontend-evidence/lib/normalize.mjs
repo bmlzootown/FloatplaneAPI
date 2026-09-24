@@ -1,6 +1,8 @@
 /**
- * Light deterministic normalization for evidence identity.
- * No aggressive AST erase; no AI.
+ * Light deterministic normalization for evidence identity (Phase 2.1.1).
+ *
+ * Identity must not thrash on cosmetic/minified churn: no raw surrounding text,
+ * byte offsets, chunk filenames, or build IDs in the id.
  */
 
 const HTTP_METHODS = new Set([
@@ -26,13 +28,6 @@ export function normalizeMethod(method) {
 
 /**
  * Normalize a path template for identity comparison.
- * - Ensure leading slash
- * - Decode trivial percent-escapes of unreserved chars
- * - Collapse duplicate slashes (except protocol — paths only)
- * - Strip trailing slash except for root
- * - Keep `{param}` / `:param` style templates as-is (after slash normalize)
- * - Do NOT strip query string keys into the path; callers should split
- *
  * @param {string} path
  * @returns {string}
  */
@@ -40,7 +35,6 @@ export function normalizePath(path) {
   let p = String(path).trim();
   if (!p) return '/';
 
-  // Absolute URLs → pathname (+ keep path templates)
   if (/^https?:\/\//i.test(p)) {
     try {
       const u = new URL(p);
@@ -50,7 +44,6 @@ export function normalizePath(path) {
     }
   }
 
-  // Strip fragment / query from path identity
   const q = p.indexOf('?');
   if (q >= 0) p = p.slice(0, q);
   const h = p.indexOf('#');
@@ -58,25 +51,22 @@ export function normalizePath(path) {
 
   if (!p.startsWith('/')) p = `/${p}`;
 
-  // Decode trivial escapes (%2F stays encoded to avoid changing structure)
   p = p.replace(/%([0-9A-Fa-f]{2})/g, (full, hex) => {
     const code = parseInt(hex, 16);
-    // Decode unreserved / common safe chars only
     if (
-      (code >= 0x41 && code <= 0x5a) || // A-Z
-      (code >= 0x61 && code <= 0x7a) || // a-z
-      (code >= 0x30 && code <= 0x39) || // 0-9
-      code === 0x2d || // -
-      code === 0x2e || // .
-      code === 0x5f || // _
-      code === 0x7e // ~
+      (code >= 0x41 && code <= 0x5a) ||
+      (code >= 0x61 && code <= 0x7a) ||
+      (code >= 0x30 && code <= 0x39) ||
+      code === 0x2d ||
+      code === 0x2e ||
+      code === 0x5f ||
+      code === 0x7e
     ) {
       return String.fromCharCode(code);
     }
     return full.toUpperCase();
   });
 
-  // Collapse duplicate slashes
   p = p.replace(/\/{2,}/g, '/');
 
   if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
@@ -84,7 +74,7 @@ export function normalizePath(path) {
 }
 
 /**
- * Infer api family label from normalized path (metadata only).
+ * Infer api family label from normalized path (metadata only — not identity).
  * @param {string} pathNormalized
  * @returns {string}
  */
@@ -100,15 +90,25 @@ export function apiFamilyFromPath(pathNormalized) {
 }
 
 /**
- * Stable evidence ID from semantic components (NOT solely filename/offset/buildId/timestamp).
+ * Stable evidence ID from semantic components only.
  *
- * Identity components: category + normalized path + method + structural context key.
- * Metadata (offsets, snippets, sha256, buildId) must not change the id.
+ * Primary structured_operation:
+ *   `structured_operation:{METHOD}:{normalizedPath}`
+ *   Discriminator appended ONLY when needed for genuinely distinct semantics
+ *   within the same category+method+path (rare).
+ *
+ * Other categories:
+ *   `category:{METHOD|-}:{path|-}:{discriminator}`
+ *   Discriminator = structural kind (e.g. sails_socket_post, host:chat_socket)
+ *   so distinct evidence kinds sharing a path do not collide.
+ *
+ * NEVER include: byte offsets, snippets, chunk filenames, source hashes, buildId, timestamps.
  *
  * @param {{
  *   category: string,
  *   path?: string | null,
  *   method?: string | null,
+ *   discriminator?: string | null,
  *   structuralContext?: string | null,
  * }} parts
  * @returns {string}
@@ -116,12 +116,59 @@ export function apiFamilyFromPath(pathNormalized) {
 export function evidenceId(parts) {
   const category = parts.category || 'unknown';
   const method = normalizeMethod(parts.method) || '-';
-  const pathPart = parts.path != null && parts.path !== ''
-    ? normalizePath(parts.path)
-    : '-';
-  const ctx = (parts.structuralContext || '-').replace(/\s+/g, ' ').trim() || '-';
-  return `${category}:${method}:${pathPart}:${ctx}`;
+  const pathPart =
+    parts.path != null && parts.path !== '' ? normalizePath(parts.path) : '-';
+  const rawDisc =
+    parts.discriminator != null && parts.discriminator !== ''
+      ? parts.discriminator
+      : parts.structuralContext != null && parts.structuralContext !== ''
+        ? parts.structuralContext
+        : null;
+  const disc = rawDisc ? String(rawDisc).replace(/\s+/g, ' ').trim() : null;
+
+  if (category === 'structured_operation') {
+    // Default OpenAPI-client discriminator is NOT part of identity.
+    if (!disc || disc === 'openapi_client_request') {
+      return `${category}:${method}:${pathPart}`;
+    }
+    return `${category}:${method}:${pathPart}:${disc}`;
+  }
+
+  return `${category}:${method}:${pathPart}:${disc || '-'}`;
 }
+
+/**
+ * Documented identity rules object embedded in api-evidence.json for Phase 2.2.
+ */
+export const IDENTITY_RULES = Object.freeze({
+  version: 2,
+  structuredOperation: {
+    components: ['category', 'normalizedMethod', 'normalizedPath'],
+    optionalDiscriminator:
+      'Only when two structured ops share method+path but are semantically distinct',
+    defaultDiscriminatorExcluded: 'openapi_client_request',
+  },
+  otherCategories: {
+    components: ['category', 'normalizedMethod', 'normalizedPath', 'discriminator'],
+    discriminatorMeaning: 'Structural kind (e.g. sails_socket_post, host:chat_socket, template_literal)',
+  },
+  metadataExcludedFromId: [
+    'byteOffset',
+    'endOffset',
+    'snippet',
+    'sourcePath',
+    'sourceSha256',
+    'chunkFilename',
+    'buildId',
+    'extractedAt',
+    'observationId',
+    'minifiedSurroundingText',
+  ],
+  duplicatePolicy:
+    'Same id → one evidence item with multiple provenance[] entries; never invent multiple operations',
+  phase22Guidance:
+    'Diff operations by id set only. Missing ids under incomplete/refuseRemoval status must NOT be classified as API removal.',
+});
 
 /**
  * @param {string} host

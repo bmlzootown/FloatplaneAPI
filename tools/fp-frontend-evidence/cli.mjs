@@ -112,6 +112,18 @@ function printHuman(result, repoRoot) {
   }
   console.log(`  Rejected signals:       ${m.rejectedSignalCount}`);
   console.log(`  Collection:             ${m.collectionStatus}`);
+  console.log(`  Deterministic closure:  ${m.reachedDeterministicClosure}`);
+  console.log(`  Refuse removal:         ${m.refuseRemoval}`);
+  console.log(`  Deps discovered:        ${m.depsDiscovered}`);
+  console.log(`  Successfully fetched:   ${m.successfullyFetched}`);
+  console.log(`  Duplicate refs:         ${m.duplicateRefs}`);
+  console.log(`  External rejects:       ${m.rejectedExternalCount}`);
+  if (m.routeRoots?.length) {
+    console.log(`  Route roots:`);
+    for (const r of m.routeRoots) {
+      console.log(`    ${r.label}: ${r.path} (${r.ok ? 'ok' : 'FAILED'})`);
+    }
+  }
   console.log(``);
   if (result.ok) {
     console.log(`Result: OK (exit ${result.exitCode ?? EXIT.SUCCESS})`);

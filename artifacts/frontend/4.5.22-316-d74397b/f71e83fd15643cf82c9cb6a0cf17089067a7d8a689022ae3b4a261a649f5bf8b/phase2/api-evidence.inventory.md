@@ -2,9 +2,9 @@
 
 **Observation:** `f71e83fd15643cf82c9cb6a0cf17089067a7d8a689022ae3b4a261a649f5bf8b`
 **Build:** `4.5.22-316-d74397b`
-**Extractor:** `phase2.1-frontend-evidence@2.1.0`
-**Evidence schema:** `v1`
-**Extracted at:** 2026-09-24T17:18:33.525Z
+**Extractor:** `phase2.1-frontend-evidence@2.1.1`
+**Evidence schema:** `v2`
+**Extracted at:** 2026-09-24T17:45:37.450Z
 
 > Frontend client evidence from archived JS for this observation only.
 > This is **not** a complete server API catalog and **not** an inter-observation change report.
@@ -24,7 +24,9 @@
 | Reachable JS modules | 249 |
 | Lazy JS (excl. entry) | 248 |
 | JS bytes archived (phase2 chunks) | 3570490 |
-| Collection status | complete |
+| Collection status | complete_with_external_rejects |
+| Deterministic closure | true |
+| External rejects | 7 |
 
 ## Structured operations by method
 
@@ -400,7 +402,7 @@
 ## URL templates
 
 - `/api/cms/v3/subscribers/download` — `js/3L4qsYBe.js`
-- `/api/connect/{param}` — `js/DllpNifU.js`
+- `/api/connect/{param}` — `js/BvoeWZ_A.js`
 - `/api/v1/components/groups` — `js/Bnzp30aR.js`
 - `/api/v2/connect/discord` — `js/DWolNGfu.js`
 
@@ -411,13 +413,13 @@
 
 ## Rejected signals
 
-- `non_floatplane_host`: `https://fairplay.twitch.keyos.com` (`js/CIWlSVcH.js`)
-- `non_floatplane_host`: `https://playready.twitch.keyos.com` (`js/CIWlSVcH.js`)
-- `non_floatplane_host`: `https://widevine.twitch.keyos.com` (`js/CIWlSVcH.js`)
-- `non_floatplane_host`: `https://fairplay.twitch.keyos.com/api/v4/getCertificate?certHash=a17fd33d3843df9b17679ccf50a419b2` (`js/CIWlSVcH.js`)
-- `non_floatplane_host`: `https://fairplay.twitch.keyos.com/api/v4/getLicense` (`js/CIWlSVcH.js`)
-- `non_floatplane_host`: `https://playready.twitch.keyos.com/api/v4/getLicense` (`js/CIWlSVcH.js`)
-- `non_floatplane_host`: `https://widevine.twitch.keyos.com/api/v4/getLicense` (`js/CIWlSVcH.js`)
+- `external_vendor_url`: `https://fairplay.twitch.keyos.com` (`js/CIWlSVcH.js`)
+- `external_vendor_url`: `https://playready.twitch.keyos.com` (`js/CIWlSVcH.js`)
+- `external_vendor_url`: `https://widevine.twitch.keyos.com` (`js/CIWlSVcH.js`)
+- `external_vendor_url`: `https://fairplay.twitch.keyos.com/api/v4/getCertificate?certHash=a17fd33d3843df9b17679ccf50a419b2` (`js/CIWlSVcH.js`)
+- `external_vendor_url`: `https://fairplay.twitch.keyos.com/api/v4/getLicense` (`js/CIWlSVcH.js`)
+- `external_vendor_url`: `https://playready.twitch.keyos.com/api/v4/getLicense` (`js/CIWlSVcH.js`)
+- `external_vendor_url`: `https://widevine.twitch.keyos.com/api/v4/getLicense` (`js/CIWlSVcH.js`)
 
 ## Disclaimer
 

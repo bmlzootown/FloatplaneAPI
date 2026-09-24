@@ -43,7 +43,7 @@ after(async () => {
   await rm(TMP, { recursive: true, force: true });
 });
 
-describe('normalize', () => {
+describe('normalize / evidence identity (2.1.1)', () => {
   it('normalizes methods and paths for identity', () => {
     assert.equal(normalizeMethod('get'), 'GET');
     assert.equal(normalizeMethod('PoSt'), 'POST');
@@ -53,21 +53,103 @@ describe('normalize', () => {
     assert.equal(normalizePath('/api/v3/x?foo=1'), '/api/v3/x');
   });
 
-  it('builds stable evidence ids from semantic components only', () => {
+  it('structured_operation id is category+method+path only (no minify context)', () => {
     const a = evidenceId({
       category: 'structured_operation',
       path: '/api/v3/user/',
       method: 'get',
-      structuralContext: 'openapi_client_request',
+      discriminator: 'openapi_client_request',
     });
     const b = evidenceId({
       category: 'structured_operation',
       path: '/api/v3/user',
       method: 'GET',
-      structuralContext: 'openapi_client_request',
     });
     assert.equal(a, b);
-    assert.match(a, /^structured_operation:GET:\/api\/v3\/user:openapi_client_request$/);
+    assert.equal(a, 'structured_operation:GET:/api/v3/user');
+  });
+
+  it('identical {method,path} in differently minified sources share identity', async () => {
+    const pretty = await readFixText('evidence/structured-ops.js');
+    const minified = pretty.replace(/\s+/g, ' ');
+    const a = extractEvidenceFromSource({
+      text: pretty,
+      sourcePath: 'js/pretty.js',
+      sourceSha256: 'a'.repeat(64),
+    });
+    const b = extractEvidenceFromSource({
+      text: minified,
+      sourcePath: 'js/min.js',
+      sourceSha256: 'b'.repeat(64),
+    });
+    const idsA = a.items
+      .filter((i) => i.category === EVIDENCE_CATEGORY.STRUCTURED_OPERATION)
+      .map((i) => i.id)
+      .sort();
+    const idsB = b.items
+      .filter((i) => i.category === EVIDENCE_CATEGORY.STRUCTURED_OPERATION)
+      .map((i) => i.id)
+      .sort();
+    assert.deepEqual(idsA, idsB);
+  });
+
+  it('moving same op to another chunk keeps the same operation id', async () => {
+    const text = await readFixText('evidence/structured-ops.js');
+    const inEntry = extractEvidenceFromSource({
+      text,
+      sourcePath: 'js/index-ENTRY.js',
+      sourceSha256: 'a'.repeat(64),
+      role: 'entry',
+    });
+    const inLazy = extractEvidenceFromSource({
+      text,
+      sourcePath: 'js/lazy-OTHER.js',
+      sourceSha256: 'b'.repeat(64),
+      role: 'lazy',
+    });
+    const id = 'structured_operation:GET:/api/v3/user/subscriptions';
+    assert.ok(inEntry.items.some((i) => i.id === id));
+    assert.ok(inLazy.items.some((i) => i.id === id));
+  });
+
+  it('duplicate occurrences → multiple provenance, not false distinct ops', async () => {
+    const text = await readFixText('evidence/structured-ops.js');
+    const a = extractEvidenceFromSource({
+      text,
+      sourcePath: 'js/a.js',
+      sourceSha256: 'a'.repeat(64),
+    });
+    const b = extractEvidenceFromSource({
+      text,
+      sourcePath: 'js/b.js',
+      sourceSha256: 'b'.repeat(64),
+    });
+    const merged = dedupeAndSortEvidence([...a.items, ...b.items]);
+    const structured = merged.filter((i) => i.category === EVIDENCE_CATEGORY.STRUCTURED_OPERATION);
+    assert.equal(structured.length, 3);
+    const getSub = structured.find((i) => i.method === 'GET');
+    assert.equal(getSub.provenance.length, 2);
+    assert.deepEqual(
+      getSub.provenance.map((p) => p.sourcePath).sort(),
+      ['js/a.js', 'js/b.js'],
+    );
+  });
+
+  it('genuinely distinct evidence sharing a path does not collide', () => {
+    const structured = evidenceId({
+      category: 'structured_operation',
+      path: '/api/v3/socket/connect',
+      method: 'POST',
+    });
+    const realtime = evidenceId({
+      category: 'realtime_operation',
+      path: '/api/v3/socket/connect',
+      method: 'POST',
+      discriminator: 'sails_socket_post',
+    });
+    assert.notEqual(structured, realtime);
+    assert.equal(structured, 'structured_operation:POST:/api/v3/socket/connect');
+    assert.match(realtime, /^realtime_operation:POST:\/api\/v3\/socket\/connect:sails_socket_post$/);
   });
 });
 
@@ -166,19 +248,25 @@ describe('extract evidence', () => {
     );
   });
 
-  it('rejects KeyOS DRM /api/ as non_floatplane_host', async () => {
+  it('rejects KeyOS DRM as external_vendor_url (not parser failure)', async () => {
     const text = await readFixText('evidence/drm-keyos.js');
     const { items, rejectedSignals } = extractEvidenceFromSource({
       text,
       sourcePath: 'js/drm-keyos.js',
       sourceSha256: 'c'.repeat(64),
     });
-    assert.ok(rejectedSignals.some((r) => r.reason === 'non_floatplane_host'));
+    assert.ok(rejectedSignals.length >= 1);
+    for (const r of rejectedSignals) {
+      assert.equal(r.reason, 'external_vendor_url');
+      assert.equal(r.classification, 'out_of_build_root');
+      assert.equal(r.whyNotFollowed, 'cross_origin_vendor_host');
+      assert.equal(r.fetched, false);
+      assert.equal(r.parserFailure, false);
+    }
     assert.equal(
       items.filter((i) => i.category === EVIDENCE_CATEGORY.STRUCTURED_OPERATION).length,
       0,
     );
-    // Weak floatplane path string stays as weaker category, not hidden
     assert.ok(
       items.some(
         (i) =>
@@ -203,45 +291,60 @@ describe('extract evidence', () => {
     assert.ok(
       realtime.some((r) => r.pathNormalized === '/api/v3/socket/tk/connect'),
     );
-    assert.ok(realtime.some((r) => r.structuralContext === 'chat_socket_uri'));
-    // Structured REST copies of socket connect also present
+    assert.ok(realtime.some((r) => r.structuralKind === 'chat_socket_uri'));
     assert.ok(countStructuredOperations(items) >= 2);
   });
 
-  it('dedupes by semantic id across offsets', () => {
+  it('dedupes by semantic id into provenance[]', () => {
     const items = [
       {
         id: evidenceId({
           category: EVIDENCE_CATEGORY.STRUCTURED_OPERATION,
           path: '/api/v3/x',
           method: 'GET',
-          structuralContext: 'openapi_client_request',
         }),
         category: EVIDENCE_CATEGORY.STRUCTURED_OPERATION,
         path: '/api/v3/x',
         pathNormalized: '/api/v3/x',
         method: 'GET',
-        source: { path: 'js/a.js', sha256: 'x', role: 'entry', byteOffset: 1, endOffset: 2, snippet: 'a' },
-        structuralContext: 'openapi_client_request',
+        provenance: [
+          {
+            sourcePath: 'js/a.js',
+            sourceSha256: 'x',
+            role: 'entry',
+            byteOffset: 1,
+            endOffset: 2,
+            snippet: 'a',
+          },
+        ],
+        structuralKind: 'openapi_client_request',
       },
       {
         id: evidenceId({
           category: EVIDENCE_CATEGORY.STRUCTURED_OPERATION,
           path: '/api/v3/x',
           method: 'GET',
-          structuralContext: 'openapi_client_request',
         }),
         category: EVIDENCE_CATEGORY.STRUCTURED_OPERATION,
         path: '/api/v3/x',
         pathNormalized: '/api/v3/x',
         method: 'GET',
-        source: { path: 'js/a.js', sha256: 'x', role: 'entry', byteOffset: 99, endOffset: 100, snippet: 'b' },
-        structuralContext: 'openapi_client_request',
+        provenance: [
+          {
+            sourcePath: 'js/a.js',
+            sourceSha256: 'x',
+            role: 'entry',
+            byteOffset: 99,
+            endOffset: 100,
+            snippet: 'b',
+          },
+        ],
+        structuralKind: 'openapi_client_request',
       },
     ];
     const deduped = dedupeAndSortEvidence(items);
     assert.equal(deduped.length, 1);
-    assert.ok(deduped[0].notes?.some((n) => n.startsWith('also_at:')));
+    assert.equal(deduped[0].provenance.length, 2);
   });
 });
 
@@ -324,6 +427,20 @@ describe('runFrontendEvidence integration (offline)', () => {
     assert.equal(result.metrics.reachableJsCount, 4);
     assert.equal(result.metrics.lazyJsCount, 3);
     assert.ok(result.metrics.mapDepsFirstWaveJs >= 2);
+    assert.ok(
+      result.chunkGraph.closure.status === 'complete' ||
+        result.chunkGraph.closure.status === 'complete_with_external_rejects',
+    );
+    assert.equal(result.chunkGraph.closure.refuseRemoval, false);
+    assert.equal(result.chunkGraph.closure.reachedDeterministicClosure, true);
+    assert.ok(result.chunkGraph.closure.depsDiscovered > 0);
+    assert.equal(result.chunkGraph.closure.uniqueSameBuildJs, 4);
+    assert.equal(result.chunkGraph.frontendRoots.allRootsOk, true);
+    assert.ok(result.chunkGraph.frontendRoots.routeRoots.length >= 1);
+    assert.ok(result.evidence.identityRules?.version >= 2);
+    assert.ok(
+      result.evidence.items.every((i) => Array.isArray(i.provenance) && i.provenance.length >= 1),
+    );
 
     const phase2 = result.phase2Dir;
     await access(path.join(phase2, 'chunk-graph.json'));
@@ -383,6 +500,9 @@ describe('runFrontendEvidence integration (offline)', () => {
       await readFile(path.join(result.phase2Dir, 'status.json'), 'utf8'),
     );
     assert.equal(status.status, 'incomplete');
+    assert.equal(status.refuseRemoval, true);
+    assert.equal(result.chunkGraph.closure.refuseRemoval, true);
+    assert.equal(result.chunkGraph.closure.reachedDeterministicClosure, false);
     // Complete evidence file must not be present
     let evidenceExists = true;
     try {
@@ -391,6 +511,91 @@ describe('runFrontendEvidence integration (offline)', () => {
       evidenceExists = false;
     }
     assert.equal(evidenceExists, false);
+  });
+});
+
+describe('inventory invariants', () => {
+  it('rejects incomplete graphs presented as complete inventory', async () => {
+    const { validateEvidenceInventory } = await import(
+      '../../tools/fp-frontend-evidence/lib/validate.mjs'
+    );
+    const result = validateEvidenceInventory({
+      evidence: {
+        items: [
+          {
+            id: 'structured_operation:GET:/api/v3/x',
+            category: 'structured_operation',
+            method: 'GET',
+            pathNormalized: '/api/v3/x',
+            provenance: [
+              {
+                sourcePath: 'js/a.js',
+                sourceSha256: 'aa',
+                role: 'entry',
+                byteOffset: 0,
+                endOffset: 1,
+                snippet: 'x',
+              },
+            ],
+          },
+        ],
+      },
+      chunkGraph: {
+        closure: { status: 'incomplete', refuseRemoval: true },
+        assets: [
+          {
+            relativePath: 'js/a.js',
+            sha256: 'aa',
+            bytesArchived: true,
+            role: 'entry',
+            importers: [],
+          },
+        ],
+      },
+    });
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some((e) => /incomplete/i.test(e)));
+  });
+
+  it('rejects structured ops missing method/path', async () => {
+    const { validateEvidenceInventory } = await import(
+      '../../tools/fp-frontend-evidence/lib/validate.mjs'
+    );
+    const result = validateEvidenceInventory({
+      evidence: {
+        items: [
+          {
+            id: 'structured_operation:-:/',
+            category: 'structured_operation',
+            method: null,
+            pathNormalized: '',
+            provenance: [
+              {
+                sourcePath: 'js/a.js',
+                sourceSha256: 'aa',
+                role: 'entry',
+                byteOffset: 0,
+                endOffset: 1,
+                snippet: 'x',
+              },
+            ],
+          },
+        ],
+      },
+      chunkGraph: {
+        closure: { status: 'complete', refuseRemoval: false },
+        assets: [
+          {
+            relativePath: 'js/a.js',
+            sha256: 'aa',
+            bytesArchived: true,
+            role: 'entry',
+            importers: [],
+          },
+        ],
+      },
+    });
+    assert.equal(result.ok, false);
   });
 });
 
