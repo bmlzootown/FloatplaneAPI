@@ -5,3 +5,10 @@
 **/.DS_Store
 
 .hypothesis/
+
+# Phase 1.1 frontend watch
+# Observation JS/manifest are tracked in-repo so a fresh clone retains bytes.
+# Staging dirs and volatile discovery HTML are not committed.
+/artifacts/frontend/.staging/
+/artifacts/frontend/**/_discovery/
+/tests/frontend-watch/.tmp-watch/

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "observationId": "f71e83fd15643cf82c9cb6a0cf17089067a7d8a689022ae3b4a261a649f5bf8b",
+  "previousObservationId": null,
+  "buildId": "4.5.22-316-d74397b",
+  "layout": "vite-user",
+  "baseUrl": "https://frontend.floatplane.com/user/4.5.22-316-d74397b/",
+  "homepageUrl": "https://www.floatplane.com/",
+  "discoveryMethod": "homepage-html-asset-urls",
+  "observedAt": "2026-09-24T15:01:38.560Z",
+  "artifacts": [
+    {
+      "path": "js/index-BZVDPgzb.js",
+      "url": "https://frontend.floatplane.com/user/4.5.22-316-d74397b/js/index-BZVDPgzb.js",
+      "sha256": "290c79097b9ba71dd577bfcd8a0709cf329309eef58afb79f8661b65a67d928b",
+      "bytes": 1809433,
+      "contentType": "application/javascript"
+    },
+    {
+      "path": "manifest.floatplane.webmanifest",
+      "url": "https://frontend.floatplane.com/user/4.5.22-316-d74397b/manifest.floatplane.webmanifest",
+      "sha256": "1e1d685d4e90d1a013ff263615358d9049186525033d4737bb5cdcc4b382b21a",
+      "bytes": 996,
+      "contentType": "application/manifest+json"
+    }
+  ],
+  "artifactDir": "artifacts/frontend/4.5.22-316-d74397b/f71e83fd15643cf82c9cb6a0cf17089067a7d8a689022ae3b4a261a649f5bf8b"
+}
