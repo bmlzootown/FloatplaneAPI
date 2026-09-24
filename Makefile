@@ -8,7 +8,8 @@ help:
 	@echo 'Available commands:'
 	@echo "clean validate test docs-all"
 	@echo "docs-trimmed docs-full docs-async"
-	@echo "frontend-watch-test frontend-discover frontend-check"
+	@echo "frontend-watch-test frontend-discover frontend-check frontend-check-json"
+	@echo "frontend-monitor frontend-monitor-json"
 
 # Section: Helpers and structural
 
@@ -34,13 +35,23 @@ test: validate trim
 
 # Phase 1: Floatplane frontend deployment watch (offline unit tests; no live FP required)
 frontend-watch-test:
-	node --test tests/frontend-watch/frontend-watch.test.mjs
+	node --test tests/frontend-watch/frontend-watch.test.mjs tests/frontend-watch/monitor-orchestrate.test.mjs
 
 frontend-discover:
 	node tools/fp-frontend-watch/cli.mjs discover
 
 frontend-check:
 	node tools/fp-frontend-watch/cli.mjs check
+
+frontend-check-json:
+	node tools/fp-frontend-watch/cli.mjs check --json
+
+# Phase 1.2: monitoring orchestration decision (for Cursor Automation / operators)
+frontend-monitor:
+	node tools/fp-frontend-watch/monitor-orchestrate.mjs --with-gh
+
+frontend-monitor-json:
+	node tools/fp-frontend-watch/monitor-orchestrate.mjs --json --with-gh
 
 # Section: Trimmed docs
 

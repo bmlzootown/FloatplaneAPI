@@ -96,10 +96,17 @@ make frontend-watch-test
 # Live read-only discovery / full check
 make frontend-discover
 make frontend-check
+make frontend-check-json
 # or: node tools/fp-frontend-watch/cli.mjs discover|check [--json] [--dry-run]
+
+# Phase 1.2 — orchestration decision for Cursor Automation (uses gh when available)
+make frontend-monitor-json
+# or: node tools/fp-frontend-watch/monitor-orchestrate.mjs --json --with-gh
 ```
 
 **Exit codes:** `0` unchanged · `1` operational failure · `2` change detected (new build id or same id with different compared SHA-256 set).
+
+**Scheduled Automation (Phase 1.2):** every 6 hours via Cursor Automations running the watcher as source of truth, with duplicate-PR suppression on fixed branch `cursor/frontend-observation`. See `tools/fp-frontend-watch/automation/README.md` and paste `tools/fp-frontend-watch/automation/PROMPT.md` into the Automation prompt.
 
 **State:** `state/last-known-frontend.json` (`schemaVersion: 2`; see `state/README.md`). Includes `observationId` + `previousObservationId` lineage. Failed checks never overwrite last-known-good state.
 
@@ -117,7 +124,7 @@ artifacts/frontend/{buildId}/{observationId}/
 
 **Same-version-changed:** build id and bundle hashes are independent. Homepage HTML is archived under `_discovery/` but is **not** part of compared identity.
 
-**Not implemented yet (later phases):** API string extraction/classification, automatic OpenAPI/AsyncAPI edits, Hydravion impact analysis, scheduled CI watch workflow, fetching all lazy chunks.
+**Not implemented yet (later phases):** API string extraction/classification, automatic OpenAPI/AsyncAPI edits, Hydravion impact analysis, fetching all lazy chunks.
 
 ### Manual frontend fetch / diff (legacy helpers)
 

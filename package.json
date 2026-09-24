@@ -15,9 +15,12 @@
   },
   "scripts": {
     "preinstall": "npx only-allow pnpm",
-    "frontend-watch-test": "node --test tests/frontend-watch/frontend-watch.test.mjs",
+    "frontend-watch-test": "node --test tests/frontend-watch/frontend-watch.test.mjs tests/frontend-watch/monitor-orchestrate.test.mjs",
     "frontend-discover": "node tools/fp-frontend-watch/cli.mjs discover",
-    "frontend-check": "node tools/fp-frontend-watch/cli.mjs check"
+    "frontend-check": "node tools/fp-frontend-watch/cli.mjs check",
+    "frontend-check-json": "node tools/fp-frontend-watch/cli.mjs check --json",
+    "frontend-monitor": "node tools/fp-frontend-watch/monitor-orchestrate.mjs --with-gh",
+    "frontend-monitor-json": "node tools/fp-frontend-watch/monitor-orchestrate.mjs --json --with-gh"
   },
   "repository": {
     "type": "git",
