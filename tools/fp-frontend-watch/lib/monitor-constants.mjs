@@ -23,6 +23,8 @@ export const PR_BODY_MARKERS = Object.freeze({
   previousObservationId: 'previousObservationId:',
   buildId: 'buildId:',
   phase: 'phase: 1-frontend-observation',
+  /** Set when Phase 2.3 analysis section is present. */
+  phaseWithEvidence: 'phase: 1-frontend-observation+2-evidence-analysis',
   pendingCount: 'pendingObservationCount:',
 });
 

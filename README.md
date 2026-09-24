@@ -103,11 +103,15 @@ make frontend-check-json
 make frontend-monitor-json
 # or: node tools/fp-frontend-watch/monitor-orchestrate.mjs --json
 # (offline tests: make frontend-watch-test — local/CI only, not every cron cycle)
+
+# Phase 2.3 — unified (Phase 1 + evidence backlog); activate via proposed PROMPT after review
+make frontend-monitor-phase2-json
+make frontend-phase2-orch-test
 ```
 
 **Exit codes:** `0` unchanged · `1` operational failure · `2` change detected (new build id or same id with different compared SHA-256 set).
 
-**Scheduled Automation (Phase 1.2):** every 6 hours via Cursor Automations. Pending observations accumulate on `cursor/frontend-observation` (A→B→C, one PR) until merged to `main`. See `tools/fp-frontend-watch/automation/README.md` and paste `tools/fp-frontend-watch/automation/PROMPT.md` into the Automation prompt. Do not activate until explicitly enabled.
+**Scheduled Automation (Phase 1.2):** every 6 hours via Cursor Automations. Pending observations accumulate on `cursor/frontend-observation` (A→B→C, one PR) until merged to `main`. See `tools/fp-frontend-watch/automation/README.md` and paste `tools/fp-frontend-watch/automation/PROMPT.md` into the Automation prompt. Do not activate until explicitly enabled. Phase 2.3 prompt (`PROMPT.phase-2-3.proposed.md`) is proposed only — not live.
 
 **State:** `state/last-known-frontend.json` (`schemaVersion: 2`; see `state/README.md`). Includes `observationId` + `previousObservationId` lineage. Failed checks never overwrite last-known-good state.
 
@@ -119,10 +123,10 @@ artifacts/frontend/{buildId}/{observationId}/
   <entry>.js
   manifest.floatplane.webmanifest
   _discovery/homepage.html    # gitignored evidence
-  phase2/                     # Phase 2.1 evidence (optional; see below)
+  phase2/                     # Phase 2.1–2.3 evidence (optional; see below)
 ```
 
-**Phase 2.1 — frontend evidence (explicit, not on the 6h schedule):** BFS reachable Vite chunks from an archived observation, archive lazy JS bytes, extract structured `{path,method}` API evidence + supporting signals. Does not edit OpenAPI, classify inter-observation changes, or write Phase 1 LKG.
+**Phase 2.1 — frontend evidence:** BFS reachable Vite chunks from an archived observation, archive lazy JS bytes, extract structured `{path,method}` API evidence + supporting signals. Does not edit OpenAPI or write Phase 1 LKG.
 
 ```sh
 make frontend-evidence-test
@@ -130,8 +134,16 @@ make frontend-evidence
 # or: make frontend-evidence OBSERVATION=<observationId>
 ```
 
-Outputs land under `artifacts/frontend/{buildId}/{observationId}/phase2/` (`chunk-graph.json`, `api-evidence.json`, inventory markdown). See `tools/fp-frontend-evidence/README.md`.
+**Phase 2.2 — evidence diff:** deterministic A→B semantic compare with directional completeness gating.
 
+```sh
+make frontend-evidence-diff-test
+make frontend-evidence-diff FROM=<observationId> TO=<observationId>
+```
+
+**Phase 2.3 — orchestration:** backlog extract+compare into the monitoring PR workflow (Observe durable first). See `tools/fp-frontend-evidence/README.md`.
+
+Outputs land under `artifacts/frontend/{buildId}/{observationId}/phase2/` (`chunk-graph.json`, `api-evidence.json`, inventory markdown, diffs, processing.json).
 **Historical Angular helper scripts** (`tools/fp-frontend-fetch*.sh`, …):
 `observationId` = SHA-256 over sorted compared artifact `path`+`sha256` lines. Same-build content change A→B creates a new directory; a second B is unchanged. Both A and B remain recoverable. HTTP fetches use default timeouts (15s homepage / 60s artifacts) with one conservative retry on transient failures.
 

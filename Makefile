@@ -10,8 +10,10 @@ help:
 	@echo "docs-trimmed docs-full docs-async"
 	@echo "frontend-watch-test frontend-discover frontend-check frontend-check-json"
 	@echo "frontend-monitor frontend-monitor-json"
+	@echo "frontend-monitor-phase2 frontend-monitor-phase2-json"
 	@echo "frontend-evidence-test frontend-evidence"
 	@echo "frontend-evidence-diff-test frontend-evidence-diff frontend-evidence-diff-latest"
+	@echo "frontend-phase2-orch-test"
 
 # Section: Helpers and structural
 
@@ -54,6 +56,17 @@ frontend-monitor:
 
 frontend-monitor-json:
 	node tools/fp-frontend-watch/monitor-orchestrate.mjs --json
+
+# Phase 2.3 — unified scheduled command: sync + Phase 1 + backlog extract/compare + PR hints
+# Do NOT pass --run-tests on routine 6h cycles.
+frontend-monitor-phase2:
+	node tools/fp-frontend-watch/monitor-phase2-orchestrate.mjs
+
+frontend-monitor-phase2-json:
+	node tools/fp-frontend-watch/monitor-phase2-orchestrate.mjs --json
+
+frontend-phase2-orch-test:
+	node --test tests/frontend-phase2-orchestrate/phase2-orchestrate.test.mjs
 
 # Phase 2.1: reachable chunk graph + API evidence for one observation (does not touch Phase 1 LKG)
 frontend-evidence-test:

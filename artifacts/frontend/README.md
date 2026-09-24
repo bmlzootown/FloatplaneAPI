@@ -32,10 +32,15 @@ phase2/
     evidence-diff.json
     evidence-diff.md
     status.json
+  processing.json             # Phase 2.3 extract/comparison status (optional)
 ```
 
-Phase 2 never changes `observationId` or Phase 1 compared artifacts. Run with
-`make frontend-evidence` / `make frontend-evidence-diff FROM=… TO=…`
-(see `tools/fp-frontend-evidence/README.md`).
+Also: `artifacts/frontend/phase2-processing-index.json` (Phase 2.3 global index; not LKG).
 
+Phase 2 never changes `observationId` or Phase 1 compared artifacts. Run with
+`make frontend-evidence` / `make frontend-evidence-diff FROM=… TO=…` /
+`make frontend-monitor-phase2-json` (see `tools/fp-frontend-evidence/README.md`).
+
+**Growth:** Phase 1 entry+manifest ~1.8 MB; Phase 2 reachable chunks ~3.5–4.1 MB;
+~5–6 MB total per observation. Reachable JS is not pruned.
 **Fresh clone:** open `state/last-known-frontend.json` → `artifactDir` → files on disk.

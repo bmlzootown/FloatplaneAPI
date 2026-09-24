@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "orchestratorId": "phase2.3-frontend-evidence-orchestrate",
+  "orchestratorVersion": "2.3.0",
+  "updatedAt": "2026-09-24T20:21:29.519Z",
+  "note": "Phase 2 processing index only. Does not alter Phase 1 LKG meaning (state/last-known-frontend.json).",
+  "observations": [
+    {
+      "observationId": "f71e83fd15643cf82c9cb6a0cf17089067a7d8a689022ae3b4a261a649f5bf8b",
+      "buildId": "4.5.22-316-d74397b",
+      "previousObservationId": null,
+      "existence": "exists",
+      "extractStatus": "complete",
+      "comparisonStatus": "not_applicable",
+      "processingPath": "artifacts/frontend/4.5.22-316-d74397b/f71e83fd15643cf82c9cb6a0cf17089067a7d8a689022ae3b4a261a649f5bf8b/phase2/processing.json"
+    }
+  ]
+}
