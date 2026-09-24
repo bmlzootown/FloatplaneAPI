@@ -79,6 +79,8 @@ async function main(argv) {
             ok: true,
             changed: result.changed,
             comparison: result.comparison,
+            observationId: result.current.observationId,
+            previousObservationId: result.current.previousObservationId,
             buildId: result.current.buildId,
             layout: result.current.layout,
             observedAt: result.current.observedAt,
@@ -112,6 +114,8 @@ function printHumanCheck(result, statePath, repoRoot) {
   console.log(`Status:      ${c.status}`);
   console.log(`Summary:     ${c.summary}`);
   console.log(`Build id:    ${cur.buildId}`);
+  console.log(`Observation: ${cur.observationId}`);
+  console.log(`Previous:    ${cur.previousObservationId ?? '(none)'}`);
   console.log(`Layout:      ${cur.layout}`);
   console.log(`Observed at: ${cur.observedAt}`);
   console.log(`Base URL:    ${cur.baseUrl}`);

@@ -84,7 +84,7 @@ docker build --tag fpapidocs:latest .
 
 Floatplane ships frontend updates silently. Phase 1 of **Floatplane API Watch** detects and archives the currently deployed frontend without assuming `fp-frontend-versions.txt` is current.
 
-**Discovery method:** one unauthenticated GET of `https://www.floatplane.com/`, then parse asset URLs pointing at `frontend.floatplane.com`. The current layout embeds a build id in paths such as `/user/{buildId}/js/index-….js` and `/user/{buildId}/manifest.floatplane.webmanifest`. That is preferred over guessing versions from historical files because it reflects what the site actually serves, needs no auth, and is a single lightweight request.
+**Discovery method:** one unauthenticated GET of `https://www.floatplane.com/`, then parse `frontend.floatplane.com` refs. For the current Vite layout, collect `/user/{buildId}/…` URLs, require a single build id, and use the actual `<script type="module">` (or script) entry path from the page — not a hard-coded `js/index-*` pattern. Angular-era `/{version}/main.js` remains a fallback. Contradictory build ids or ambiguous entries fail closed.
 
 **Run a check:**
 
@@ -99,24 +99,25 @@ make frontend-check
 # or: node tools/fp-frontend-watch/cli.mjs discover|check [--json] [--dry-run]
 ```
 
-**Exit codes:** `0` unchanged · `1` operational failure · `2` change detected (new build id, same id with different SHA-256, or archive content conflict).
+**Exit codes:** `0` unchanged · `1` operational failure · `2` change detected (new build id or same id with different compared SHA-256 set).
 
-**State:** `state/last-known-frontend.json` (see `state/README.md`). Failed checks never overwrite last-known-good state.
+**State:** `state/last-known-frontend.json` (`schemaVersion: 2`; see `state/README.md`). Includes `observationId` + `previousObservationId` lineage. Failed checks never overwrite last-known-good state.
 
-**Artifact layout** (downloaded JS is gitignored; see `artifacts/frontend/README.md`):
+**Artifact layout** (Phase 1 monitored entry JS + manifest are **committed** so a fresh clone retains bytes; ~1–2MB per observation — see `artifacts/frontend/README.md`):
 
 ```
-artifacts/frontend/{buildId}/
-  _discovery/homepage.html
-  _meta/observation.json
-  js/index-*.js
+artifacts/frontend/{buildId}/{observationId}/
+  observation.json
+  <entry>.js
   manifest.floatplane.webmanifest
-  _conflicts/{timestamp}/…    # same path, different bytes — original kept
+  _discovery/homepage.html    # gitignored evidence
 ```
 
-**Same-version-changed:** build id and bundle hashes are independent. If the id is unchanged but bytes differ, that is a change. If an archived file would be overwritten with different contents, the original is kept and the new bytes are stored under `_conflicts/` with a noteworthy note. Homepage HTML is archived under `_discovery/` for evidence but is **not** part of compared identity (it often includes volatile challenge markup).
+`observationId` = SHA-256 over sorted compared artifact `path`+`sha256` lines. Same-build content change A→B creates a new directory; a second B is unchanged. Both A and B remain recoverable. HTTP fetches use default timeouts (15s homepage / 60s artifacts) with one conservative retry on transient failures.
 
-**Not implemented yet (later phases):** API string extraction/classification, automatic OpenAPI/AsyncAPI edits, Hydravion impact analysis, scheduled CI watch workflow. Lazy JS chunks referenced from the entry module are also not fetched in Phase 1 (entry + manifest suffice for build-id/content change detection with minimal load).
+**Same-version-changed:** build id and bundle hashes are independent. Homepage HTML is archived under `_discovery/` but is **not** part of compared identity.
+
+**Not implemented yet (later phases):** API string extraction/classification, automatic OpenAPI/AsyncAPI edits, Hydravion impact analysis, scheduled CI watch workflow, fetching all lazy chunks.
 
 ### Manual frontend fetch / diff (legacy helpers)
 

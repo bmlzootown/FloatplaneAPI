@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { SCHEMA_VERSION } from './constants.mjs';
+import { observationIdFromArtifacts } from './observation-id.mjs';
 
 /**
  * @typedef {{
@@ -13,6 +14,8 @@ import { SCHEMA_VERSION } from './constants.mjs';
  *
  * @typedef {{
  *   schemaVersion: number,
+ *   observationId: string,
+ *   previousObservationId: string | null,
  *   buildId: string,
  *   layout: string,
  *   baseUrl: string,
@@ -66,10 +69,36 @@ export function normalizeState(parsed, statePath = '<memory>') {
       `Unsupported state schemaVersion at ${statePath}: ${String(s.schemaVersion)} (expected ${SCHEMA_VERSION})`,
     );
   }
-  for (const key of ['buildId', 'layout', 'baseUrl', 'homepageUrl', 'discoveryMethod', 'observedAt', 'artifactDir']) {
+  for (const key of [
+    'buildId',
+    'layout',
+    'baseUrl',
+    'homepageUrl',
+    'discoveryMethod',
+    'observedAt',
+    'artifactDir',
+    'observationId',
+  ]) {
     if (typeof s[key] !== 'string' || s[key].length === 0) {
       throw new StateError(`Malformed state at ${statePath}: missing string field ${key}`);
     }
+  }
+  if (!(s.previousObservationId === null || typeof s.previousObservationId === 'string')) {
+    throw new StateError(
+      `Malformed state at ${statePath}: previousObservationId must be string or null`,
+    );
+  }
+  if (typeof s.observationId === 'string' && !/^[a-f0-9]{64}$/.test(s.observationId)) {
+    throw new StateError(`Malformed state at ${statePath}: observationId must be 64-char hex`);
+  }
+  if (
+    typeof s.previousObservationId === 'string' &&
+    s.previousObservationId.length > 0 &&
+    !/^[a-f0-9]{64}$/.test(s.previousObservationId)
+  ) {
+    throw new StateError(
+      `Malformed state at ${statePath}: previousObservationId must be 64-char hex or null`,
+    );
   }
   if (!Array.isArray(s.artifacts) || s.artifacts.length === 0) {
     throw new StateError(`Malformed state at ${statePath}: artifacts must be a non-empty array`);
@@ -100,8 +129,20 @@ export function normalizeState(parsed, statePath = '<memory>') {
     });
   }
 
+  const derivedId = observationIdFromArtifacts(artifacts);
+  if (derivedId !== s.observationId) {
+    throw new StateError(
+      `Malformed state at ${statePath}: observationId does not match artifact fingerprint`,
+    );
+  }
+
   return {
     schemaVersion: SCHEMA_VERSION,
+    observationId: /** @type {string} */ (s.observationId),
+    previousObservationId:
+      s.previousObservationId === null || s.previousObservationId === ''
+        ? null
+        : /** @type {string} */ (s.previousObservationId),
     buildId: /** @type {string} */ (s.buildId),
     layout: /** @type {string} */ (s.layout),
     baseUrl: /** @type {string} */ (s.baseUrl),

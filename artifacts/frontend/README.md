@@ -1,15 +1,22 @@
-# Frontend artifacts (gitignored)
+# Frontend artifacts (Phase 1.1)
 
-Downloaded Floatplane frontend bundles and discovery snapshots land here:
+Observations are stored under content-derived IDs so same-build content changes
+do not overwrite prior bytes:
 
 ```
-artifacts/frontend/{buildId}/
-  _discovery/homepage.html
-  _meta/observation.json
-  js/index-*.js                  # vite-user layout
+artifacts/frontend/{buildId}/{observationId}/
+  observation.json
+  js/… or assets/…          # raw downloaded entry (SHA-256 of these bytes)
   manifest.floatplane.webmanifest
-  _conflicts/{iso}/...           # same path, different bytes (never overwrite)
+  _discovery/homepage.html  # evidence only; gitignored (volatile)
 ```
 
-This directory is intentionally gitignored (minified JS is large). Manifests and
-hashes that matter for comparison live in `state/last-known-frontend.json`.
+`observationId` = SHA-256 over sorted `path\\nsha256\\n` lines of the **compared**
+CDN artifacts (entry + manifest). Timestamps are metadata only.
+
+**Persistence:** Phase 1 monitored artifacts (entry JS + manifest + observation.json)
+are committed to git so a fresh clone can read prior archived bytes without external
+storage. Expect ~1–2MB growth per distinct observation. Phase 2 may switch strategy
+for lazy chunks. Staging lives under `artifacts/frontend/.staging/` (gitignored).
+
+**Fresh clone:** open `state/last-known-frontend.json` → `artifactDir` → files on disk.
