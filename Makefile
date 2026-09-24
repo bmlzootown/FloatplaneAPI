@@ -46,12 +46,12 @@ frontend-check:
 frontend-check-json:
 	node tools/fp-frontend-watch/cli.mjs check --json
 
-# Phase 1.2: monitoring orchestration decision (for Cursor Automation / operators)
+# Phase 1.2 — monitoring orchestration decision (for Cursor Automation / operators)
 frontend-monitor:
-	node tools/fp-frontend-watch/monitor-orchestrate.mjs --with-gh
+	node tools/fp-frontend-watch/monitor-orchestrate.mjs
 
 frontend-monitor-json:
-	node tools/fp-frontend-watch/monitor-orchestrate.mjs --json --with-gh
+	node tools/fp-frontend-watch/monitor-orchestrate.mjs --json
 
 # Section: Trimmed docs
 

@@ -1,5 +1,6 @@
 /**
- * Factual Phase 1 PR body for frontend observation PRs.
+ * Factual Phase 1 PR body for the cumulative pending observation ledger.
+ * Summarizes ALL pending observations, not only the newest.
  * Never claims API / OpenAPI / AsyncAPI / Hydravion changes.
  */
 
@@ -7,64 +8,106 @@ import { PR_BODY_MARKERS } from './monitor-constants.mjs';
 
 /**
  * @param {object} input
- * @param {object} input.checkSummary from decideMonitorAction
- * @param {string} [input.watcherResult] human status line
+ * @param {import('./monitor-decision.mjs').PendingObservation[]} input.pendingObservations
+ * @param {object} [input.latestCheckSummary]
+ * @param {string} [input.watcherResult]
  * @param {object|null} [input.testStatus]
- * @param {object|null} [input.supersede]
  * @param {string[]} [input.extraNotes]
+ * @param {string|null} [input.mainObservationId]
  */
 export function formatObservationPrBody({
-  checkSummary,
-  watcherResult = 'CHANGE DETECTED (exit 2)',
+  pendingObservations = [],
+  latestCheckSummary = null,
+  watcherResult = 'CHANGE DETECTED (exit 2) — pending ledger updated',
   testStatus = null,
-  supersede = null,
   extraNotes = [],
+  mainObservationId = null,
 }) {
-  const s = checkSummary || {};
-  const tests = testStatus || s.testStatus || null;
+  const pending = pendingObservations.length
+    ? pendingObservations
+    : latestCheckSummary?.observationId
+      ? [
+          {
+            observationId: latestCheckSummary.observationId,
+            previousObservationId: latestCheckSummary.previousObservationId,
+            buildId: latestCheckSummary.buildId,
+            observedAt: latestCheckSummary.observedAt,
+            artifactDir: latestCheckSummary.artifactDir,
+            artifacts: latestCheckSummary.artifacts,
+            layout: latestCheckSummary.layout,
+          },
+        ]
+      : [];
+
+  const latest = pending[pending.length - 1] || latestCheckSummary || {};
+  const tests = testStatus || latestCheckSummary?.testStatus || null;
   const lines = [];
 
   lines.push('## Floatplane frontend observation (Phase 1 only)');
   lines.push('');
   lines.push(PR_BODY_MARKERS.phase);
-  lines.push(`${PR_BODY_MARKERS.buildId} ${s.buildId ?? '(unknown)'}`);
-  lines.push(`${PR_BODY_MARKERS.observationId} ${s.observationId ?? '(unknown)'}`);
+  lines.push(`${PR_BODY_MARKERS.pendingCount} ${pending.length}`);
+  lines.push(`${PR_BODY_MARKERS.buildId} ${latest.buildId ?? '(unknown)'}`);
+  lines.push(`${PR_BODY_MARKERS.observationId} ${latest.observationId ?? '(unknown)'}`);
   lines.push(
     `${PR_BODY_MARKERS.previousObservationId} ${
-      s.previousObservationId == null ? '(none)' : s.previousObservationId
+      latest.previousObservationId == null ? '(none)' : latest.previousObservationId
     }`,
   );
-  lines.push(`observedAt: ${s.observedAt ?? '(unknown)'}`);
-  lines.push(`layout: ${s.layout ?? '(unknown)'}`);
-  lines.push(`artifactDir: ${s.artifactDir ?? '(unknown)'}`);
-  lines.push(`statePath: ${s.statePath ?? 'state/last-known-frontend.json'}`);
+  lines.push(`observedAt: ${latest.observedAt ?? '(unknown)'}`);
+  lines.push(`layout: ${latest.layout ?? '(unknown)'}`);
+  lines.push(`artifactDir: ${latest.artifactDir ?? '(unknown)'}`);
+  lines.push(`statePath: state/last-known-frontend.json`);
+  if (mainObservationId) {
+    lines.push(`mainObservationIdAtOpen: ${mainObservationId}`);
+  }
   lines.push('');
-  lines.push('### Watcher result');
+  lines.push('### Pending observation ledger');
+  lines.push('');
+  lines.push(
+    'Branch `cursor/frontend-observation` is a durable pending ledger. `main` remains authoritative until this PR merges.',
+  );
+  lines.push('');
+  if (!pending.length) {
+    lines.push('_No pending observations listed._');
+  } else {
+    pending.forEach((obs, i) => {
+      lines.push(`#### ${i + 1}. buildId \`${obs.buildId ?? '?'}\``);
+      lines.push('');
+      lines.push(`- observationId: \`${obs.observationId ?? '?'}\``);
+      lines.push(
+        `- previousObservationId: \`${obs.previousObservationId == null ? '(none)' : obs.previousObservationId}\``,
+      );
+      if (obs.observedAt) lines.push(`- observedAt: ${obs.observedAt}`);
+      if (obs.artifactDir) lines.push(`- artifactDir: \`${obs.artifactDir}\``);
+      if (Array.isArray(obs.artifacts) && obs.artifacts.length) {
+        lines.push('- artifacts:');
+        for (const a of obs.artifacts) {
+          lines.push(
+            `  - \`${a.sha256}\`  ${a.bytes ?? '?'} B  \`${a.path}\``,
+          );
+        }
+      }
+      lines.push('');
+    });
+  }
+
+  lines.push('### Latest watcher result');
   lines.push('');
   lines.push(`- ${watcherResult}`);
-  if (s.comparison?.status) {
-    lines.push(`- comparison.status: \`${s.comparison.status}\``);
+  if (latestCheckSummary?.comparison?.status) {
+    lines.push(`- comparison.status: \`${latestCheckSummary.comparison.status}\``);
   }
-  if (s.comparison?.summary) {
-    lines.push(`- comparison.summary: ${s.comparison.summary}`);
-  }
-  lines.push('');
-  lines.push('### Artifacts (hashes)');
-  lines.push('');
-  if (Array.isArray(s.artifacts) && s.artifacts.length) {
-    for (const a of s.artifacts) {
-      lines.push(
-        `- \`${a.sha256}\`  ${a.bytes ?? '?'} B  \`${a.path}\`${a.url ? `  (${a.url})` : ''}`,
-      );
-    }
-  } else {
-    lines.push('- (none listed in watcher JSON)');
+  if (latestCheckSummary?.comparison?.summary) {
+    lines.push(`- comparison.summary: ${latestCheckSummary.comparison.summary}`);
   }
   lines.push('');
   lines.push('### Tests / checks');
   lines.push('');
   if (tests) {
-    lines.push(`- frontend-watch-test: ${tests.frontendWatchTest ?? tests.status ?? 'see agent run'}`);
+    lines.push(
+      `- frontend-watch-test: ${tests.frontendWatchTest ?? tests.status ?? 'see agent run'}`,
+    );
     if (tests.detail) lines.push(`- detail: ${tests.detail}`);
   } else {
     lines.push('- frontend-watch-test: run by automation agent before opening/updating this PR');
@@ -77,33 +120,11 @@ export function formatObservationPrBody({
   lines.push('- No OpenAPI, AsyncAPI, or Hydravion changes are included or implied.');
   lines.push('- Do not auto-merge; human review required.');
   lines.push(
-    '- Unmerged observations are not last-known-good on the default branch until this PR merges.',
+    '- Pending observations are not authoritative on `main` until this PR merges.',
   );
-
-  if (supersede?.previousOpenObservationId) {
-    lines.push('');
-    lines.push('### Superseded unmerged observation');
-    lines.push('');
-    lines.push(
-      `- Prior open observationId: \`${supersede.previousOpenObservationId}\`` +
-        (supersede.previousOpenBuildId ? ` (buildId \`${supersede.previousOpenBuildId}\`)` : ''),
-    );
-    if (supersede.previousHeadSha) {
-      lines.push(`- Prior monitoring tip SHA (recovery): \`${supersede.previousHeadSha}\``);
-    }
-    lines.push(
-      '- A newer live deployment was observed before the prior observation PR merged.',
-    );
-    lines.push(
-      '- Monitoring strategy: reuse/update this same PR/branch tip from current default + latest watcher output.',
-    );
-    lines.push(
-      '- Prior unmerged observation was never default LKG; recoverable from prior tip SHA / carried artifact dirs when present, or from Floatplane CDN if still published.',
-    );
-    lines.push(
-      '- `previousObservationId` in committed state is exactly what the watcher produced against default LKG (not rewritten to the unmerged prior).',
-    );
-  }
+  lines.push(
+    '- While open, new deployments append to this same branch/PR (A→B→C). No force-reset from main.',
+  );
 
   if (extraNotes.length) {
     lines.push('');

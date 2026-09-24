@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 /**
- * Phase 1.2 monitoring orchestrator.
+ * Phase 1.2 monitoring orchestrator — cumulative pending ledger.
  *
- * Runs the existing frontend watcher as source of truth, then emits a
- * machine-readable decision for Cursor Automation (or a human operator).
+ * Every run:
+ *   1. Explicitly refresh origin/main (+ monitoring branch if present)
+ *   2. Prepare workspace (main, or monitoring tip with main merged in)
+ *   3. Run frontend watcher against that baseline
+ *   4. Emit machine-readable decision (append commit / open-or-update one PR)
  *
- * Does not open PRs itself (Cloud Agent / Automation owns git PR tools).
- * Optional --with-gh inspects open monitoring PRs via `gh` for duplicate suppression.
+ * Does not force-reset the monitoring branch from main while pending commits exist.
+ * Optional --with-gh is informational only; correctness uses fetched git refs.
  *
  * Usage:
- *   node tools/fp-frontend-watch/monitor-orchestrate.mjs [--json] [--with-gh] [--skip-check]
- *   node tools/fp-frontend-watch/monitor-orchestrate.mjs --decision-only --exit-code N --check-json '{...}'
- *
- * Exit codes mirror the watcher when a check is run (0/1/2), except
- * decision-only mode always exits 0 after printing the decision unless --fail-on-failure.
+ *   node tools/fp-frontend-watch/monitor-orchestrate.mjs [--json] [--with-gh] [--run-tests]
+ *   node tools/fp-frontend-watch/monitor-orchestrate.mjs --decision-only ...
  */
 
 import { spawnSync } from 'node:child_process';
@@ -21,11 +21,27 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EXIT } from './lib/constants.mjs';
 import {
+  DEFAULT_BRANCH,
   MONITOR_BRANCH,
   PR_TITLE_PREFIX,
 } from './lib/monitor-constants.mjs';
-import { decideMonitorAction, normalizeOpenMonitorPrs } from './lib/monitor-decision.mjs';
+import {
+  decideAfterMainSync,
+  decideMonitorAction,
+  decideWorkspacePrep,
+  normalizeOpenMonitorPrs,
+  selectMonitorPr,
+} from './lib/monitor-decision.mjs';
 import { formatObservationPrBody } from './lib/monitor-pr-body.mjs';
+import {
+  checkoutBranch,
+  collectPendingObservations,
+  git,
+  mergeOriginMain,
+  readStateFromTreeish,
+  readWorkingState,
+  refreshMonitoringRefs,
+} from './lib/monitor-scm.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -38,76 +54,248 @@ async function main(argv) {
     process.exit(0);
   }
 
-  let exitCode;
-  let checkResult;
-
+  // Pure decision-only path (offline tests / injected fixtures).
   if (args.decisionOnly) {
-    exitCode = args.exitCode;
-    checkResult = args.checkJson;
-  } else {
-    const ran = runWatcherCheck({ dryRun: args.dryRun });
-    exitCode = ran.exitCode;
-    checkResult = ran.json;
+    const decision = buildDecisionFromInjected(args);
+    emit(decision, args);
+    process.exit(
+      args.failOnFailure && args.exitCode === EXIT.FAILURE ? EXIT.FAILURE : 0,
+    );
+  }
+
+  // --- Live orchestration ---
+  const refreshed = refreshMonitoringRefs(REPO_ROOT);
+  if (!refreshed.ok) {
+    const decision = decideWorkspacePrep({
+      fetchOk: false,
+      fetchError: refreshed.error,
+    });
+    emit(decision, args);
+    process.exit(EXIT.FAILURE);
+  }
+
+  const pendingCollected = await collectPendingObservations(REPO_ROOT);
+  if (!pendingCollected.ok) {
+    const decision = {
+      schemaVersion: 2,
+      action: 'abort',
+      reason: 'pending_ledger_inspect_failed',
+      runWatcher: false,
+      mutateRepo: false,
+      error: pendingCollected.error,
+      notes: ['Could not inspect pending monitoring commits after fetch. Fail closed.'],
+    };
+    emit(decision, args);
+    process.exit(EXIT.FAILURE);
   }
 
   let openMonitorPrs = args.openPrsJson || [];
-  if (args.withGh && !args.decisionOnly) {
-    openMonitorPrs = listOpenMonitorPrsViaGh();
+  if (args.withGh) {
+    try {
+      openMonitorPrs = listOpenMonitorPrsViaGh();
+    } catch (err) {
+      // gh is optional — continue with git-derived pending ledger.
+      console.error(
+        `Warning: --with-gh failed (${err instanceof Error ? err.message : err}); continuing with git refs only.`,
+      );
+    }
   }
-  openMonitorPrs = normalizeOpenMonitorPrs(openMonitorPrs);
+  const openMonitorPr = selectMonitorPr(normalizeOpenMonitorPrs(openMonitorPrs));
+
+  const mainState = await readStateFromTreeish(REPO_ROOT, `origin/${DEFAULT_BRANCH}`);
+  const monitorState = refreshed.monitorBranchExists
+    ? await readStateFromTreeish(REPO_ROOT, `origin/${MONITOR_BRANCH}`)
+    : null;
+
+  const prep = decideWorkspacePrep({
+    fetchOk: true,
+    monitorBranchExists: refreshed.monitorBranchExists,
+    monitorHasPendingCommits: pendingCollected.pending.length > 0,
+    mainObservationId: mainState?.observationId ?? null,
+    monitorTipObservationId: monitorState?.observationId ?? null,
+    pendingObservations: pendingCollected.pending,
+    openMonitorPr,
+  });
+
+  if (prep.action === 'abort' || !prep.runWatcher) {
+    emit(prep, args);
+    process.exit(EXIT.FAILURE);
+  }
+
+  // Prepare checkout
+  if (prep.action === 'use_monitor_branch') {
+    const co = checkoutBranch(REPO_ROOT, MONITOR_BRANCH);
+    if (!co.ok) {
+      emit(
+        {
+          schemaVersion: 2,
+          action: 'abort',
+          reason: 'checkout_failed',
+          runWatcher: false,
+          error: co.error,
+          notes: ['Failed to checkout monitoring branch after refresh.'],
+        },
+        args,
+      );
+      process.exit(EXIT.FAILURE);
+    }
+    if (prep.syncMainFirst) {
+      const merged = mergeOriginMain(REPO_ROOT);
+      const syncDecision = decideAfterMainSync({
+        syncAttempted: true,
+        conflict: merged.conflict,
+        conflictPaths: merged.conflictPaths,
+        syncError: !merged.ok && !merged.conflict,
+        error: merged.error,
+      });
+      if (syncDecision.action === 'abort') {
+        emit({ ...prep, ...syncDecision, phase: 'sync' }, args);
+        process.exit(EXIT.FAILURE);
+      }
+    }
+  } else {
+    // Authoritative baseline: origin/main
+    const co = checkoutBranch(REPO_ROOT, DEFAULT_BRANCH);
+    if (!co.ok) {
+      const det = spawnSync(
+        'git',
+        ['checkout', '--detach', `origin/${DEFAULT_BRANCH}`],
+        { cwd: REPO_ROOT, encoding: 'utf8' },
+      );
+      if (det.status !== 0) {
+        emit(
+          {
+            schemaVersion: 2,
+            action: 'abort',
+            reason: 'checkout_failed',
+            runWatcher: false,
+            error: co.error || det.stderr || det.stdout,
+          },
+          args,
+        );
+        process.exit(EXIT.FAILURE);
+      }
+    }
+    if (prep.resetMonitorFromMain) {
+      // Safe only when decideWorkspacePrep said there are no pending commits.
+      gitResetMonitorFromMain(REPO_ROOT);
+    }
+  }
+
+  const baselineState = await readWorkingState(REPO_ROOT);
+  const baselineObservationId = baselineState?.observationId ?? prep.expectedBaselineObservationId;
 
   let testStatus = args.testStatusJson || null;
   if (args.runTests) {
     testStatus = runFrontendWatchTests();
+    if (testStatus.status === 'fail') {
+      emit(
+        {
+          schemaVersion: 2,
+          action: 'report_failure',
+          reason: 'unit_tests_failed',
+          runWatcher: false,
+          appendObservationCommit: false,
+          createPullRequest: false,
+          error: testStatus.detail || 'frontend-watch-test failed',
+          testStatus,
+          notes: ['Unit tests failed before watcher; no observation mutation.'],
+        },
+        args,
+      );
+      process.exit(EXIT.FAILURE);
+    }
   }
 
+  const ran = runWatcherCheck({ dryRun: args.dryRun });
   const decision = decideMonitorAction({
-    exitCode,
-    checkResult,
-    openMonitorPrs,
+    exitCode: ran.exitCode,
+    checkResult: ran.json,
+    baselineObservationId,
+    pendingObservations: pendingCollected.pending,
+    openMonitorPr,
     testStatus,
+    workspaceFromMonitor: prep.action === 'use_monitor_branch',
   });
 
-  if (
-    decision.action === 'open_monitor_pr' ||
-    decision.action === 'update_monitor_pr'
-  ) {
-    decision.prBody = formatObservationPrBody({
-      checkSummary: decision.checkSummary,
-      watcherResult: 'CHANGE DETECTED (exit 2)',
-      testStatus,
-      supersede:
-        decision.reason === 'supersede_unmerged_observation'
-          ? {
-              previousOpenObservationId: decision.previousOpenObservationId,
-              previousOpenBuildId: decision.previousOpenBuildId,
-              previousHeadSha: decision.openMonitorPr?.headSha ?? null,
-            }
-          : null,
-      extraNotes: decision.notes,
-    });
-    decision.gitHints = {
-      baseBranch: 'main',
-      monitorBranch: MONITOR_BRANCH,
-      commitMessage: `Floatplane frontend observation ${decision.buildId} (${String(decision.observationId).slice(0, 12)})`,
-      pathsHint: [
-        'state/last-known-frontend.json',
-        decision.checkSummary?.artifactDir,
-        'Any carried-forward prior unmerged artifact dirs under artifacts/frontend/ (update case only)',
-      ].filter(Boolean),
-    };
+  attachPrArtifacts(decision, {
+    testStatus,
+    mainObservationId: mainState?.observationId ?? null,
+  });
+
+  emit(decision, args);
+  process.exit(
+    decision.action === 'abort' || decision.action === 'report_failure'
+      ? EXIT.FAILURE
+      : ran.exitCode,
+  );
+}
+
+function buildDecisionFromInjected(args) {
+  if (args.phase === 'prep') {
+    return decideWorkspacePrep(args.prepJson || args.checkJson || {});
+  }
+  if (args.phase === 'sync') {
+    return decideAfterMainSync(args.syncJson || args.checkJson || {});
   }
 
+  const openMonitorPrs = normalizeOpenMonitorPrs(args.openPrsJson || []);
+  const openMonitorPr = selectMonitorPr(openMonitorPrs);
+  const decision = decideMonitorAction({
+    exitCode: args.exitCode,
+    checkResult: args.checkJson,
+    baselineObservationId: args.baselineObservationId ?? null,
+    pendingObservations: args.pendingJson || [],
+    openMonitorPr,
+    testStatus: args.testStatusJson || null,
+    workspaceFromMonitor: Boolean(args.workspaceFromMonitor),
+  });
+  attachPrArtifacts(decision, {
+    testStatus: args.testStatusJson || null,
+    mainObservationId: args.mainObservationId ?? null,
+  });
+  return decision;
+}
+
+function attachPrArtifacts(decision, { testStatus, mainObservationId }) {
+  if (
+    decision.action !== 'open_monitor_pr' &&
+    decision.action !== 'update_monitor_pr'
+  ) {
+    return;
+  }
+  decision.prBody = formatObservationPrBody({
+    pendingObservations: decision.pendingObservations || [],
+    latestCheckSummary: decision.checkSummary,
+    watcherResult: 'CHANGE DETECTED (exit 2) — pending ledger updated',
+    testStatus,
+    extraNotes: decision.notes,
+    mainObservationId,
+  });
+  decision.gitHints = {
+    baseBranch: DEFAULT_BRANCH,
+    monitorBranch: MONITOR_BRANCH,
+    commitMessage: decision.commitMessage,
+    forcePush: false,
+    appendOnly: true,
+    pathsHint: [
+      'state/last-known-frontend.json',
+      decision.checkSummary?.artifactDir,
+    ].filter(Boolean),
+  };
+}
+
+/** Local tip only — does not force-push; agent/ops may push when appropriate. */
+function gitResetMonitorFromMain(repoRoot) {
+  git(repoRoot, ['branch', '-f', MONITOR_BRANCH, `origin/${DEFAULT_BRANCH}`]);
+}
+
+function emit(decision, args) {
   if (args.json || args.decisionOnly) {
     console.log(JSON.stringify(decision, null, 2));
   } else {
     printHuman(decision);
   }
-
-  if (args.decisionOnly) {
-    process.exit(args.failOnFailure && exitCode === EXIT.FAILURE ? EXIT.FAILURE : 0);
-  }
-  process.exit(exitCode);
 }
 
 function runWatcherCheck({ dryRun }) {
@@ -142,7 +330,11 @@ function runWatcherCheck({ dryRun }) {
 function runFrontendWatchTests() {
   const proc = spawnSync(
     process.execPath,
-    ['--test', 'tests/frontend-watch/frontend-watch.test.mjs'],
+    [
+      '--test',
+      'tests/frontend-watch/frontend-watch.test.mjs',
+      'tests/frontend-watch/monitor-orchestrate.test.mjs',
+    ],
     { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 },
   );
   const ok = proc.status === 0;
@@ -150,13 +342,14 @@ function runFrontendWatchTests() {
     frontendWatchTest: ok ? 'pass' : 'fail',
     status: ok ? 'pass' : 'fail',
     exitCode: proc.status,
-    detail: ok ? 'node --test tests/frontend-watch/*.mjs exited 0' : (proc.stderr || proc.stdout || '').trim().slice(0, 1000),
+    detail: ok
+      ? 'node --test tests/frontend-watch/*.mjs exited 0'
+      : (proc.stderr || proc.stdout || '').trim().slice(0, 1000),
   };
 }
 
 /**
- * List open PRs on the monitoring branch or with the observation title prefix.
- * Requires GitHub CLI (`gh`) authenticated for the repo.
+ * Optional PR discovery. Monitoring correctness must not depend on gh auth.
  */
 function listOpenMonitorPrsViaGh() {
   const proc = spawnSync(
@@ -200,12 +393,12 @@ function printHuman(decision) {
   console.log('------------------------------------');
   console.log(`action:     ${decision.action}`);
   console.log(`reason:     ${decision.reason}`);
-  console.log(`exitCode:   ${decision.exitCode}`);
+  if (decision.exitCode != null) console.log(`exitCode:   ${decision.exitCode}`);
   if (decision.observationId) console.log(`observation:${decision.observationId}`);
   if (decision.buildId) console.log(`buildId:    ${decision.buildId}`);
-  if (decision.openMonitorPr?.url) {
-    console.log(`open PR:    ${decision.openMonitorPr.url}`);
-  }
+  if (decision.previousObservationId)
+    console.log(`previous:   ${decision.previousObservationId}`);
+  if (decision.openMonitorPr?.url) console.log(`open PR:    ${decision.openMonitorPr.url}`);
   if (decision.error) console.log(`error:      ${decision.error}`);
   if (decision.prTitle) console.log(`prTitle:    ${decision.prTitle}`);
   for (const n of decision.notes || []) console.log(`- ${n}`);
@@ -214,23 +407,24 @@ function printHuman(decision) {
 function printHelp() {
   console.log(`Floatplane frontend monitor orchestrator (Phase 1.2)
 
-Runs tools/fp-frontend-watch/cli.mjs check --json, then prints a decision for
-Cursor Automation duplicate-PR suppression / update behavior.
+Cumulative pending ledger on ${MONITOR_BRANCH}. Explicitly refreshes
+origin/${DEFAULT_BRANCH} (and monitoring branch) every run before watching.
 
 Options:
-  --json              Print decision JSON (default when piping; always for automation)
-  --with-gh           Query open monitoring PRs via GitHub CLI
-  --run-tests         Also run make frontend-watch-test and attach status
-  --dry-run           Pass --dry-run to the watcher (no state/artifact writes)
-  --decision-only     Skip live check; require --exit-code and --check-json
-  --exit-code <n>     For --decision-only
-  --check-json <json> For --decision-only
-  --open-prs-json <json>  Inject open PR list (tests / offline)
-  --fail-on-failure   With --decision-only, exit 1 when exit-code is 1
-  -h, --help          Show help
-
-Monitoring branch: ${MONITOR_BRANCH}
-PR title prefix:   ${PR_TITLE_PREFIX} <buildId>
+  --json                 Print decision JSON
+  --with-gh              Optional open-PR hints via GitHub CLI (not required for correctness)
+  --run-tests            Run frontend-watch unit tests before watcher
+  --dry-run              Pass --dry-run to the watcher
+  --decision-only        Skip live SCM/watcher; inject fixtures
+  --phase prep|sync|watch  With --decision-only (default watch)
+  --exit-code <n>        For watch phase
+  --check-json <json>    Watcher payload or prep/sync fixture
+  --baseline-observation-id <id>
+  --pending-json <json>  Already-pending observations (array)
+  --open-prs-json <json>
+  --prep-json / --sync-json
+  --fail-on-failure      With --decision-only, exit 1 when exit-code is 1
+  -h, --help
 `);
 }
 
@@ -243,10 +437,17 @@ function parseArgs(argv) {
     decisionOnly: false,
     failOnFailure: false,
     help: false,
+    phase: 'watch',
     exitCode: null,
     checkJson: null,
     openPrsJson: null,
     testStatusJson: null,
+    pendingJson: null,
+    prepJson: null,
+    syncJson: null,
+    baselineObservationId: null,
+    mainObservationId: null,
+    workspaceFromMonitor: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -256,18 +457,29 @@ function parseArgs(argv) {
     else if (a === '--dry-run') out.dryRun = true;
     else if (a === '--decision-only') out.decisionOnly = true;
     else if (a === '--fail-on-failure') out.failOnFailure = true;
+    else if (a === '--workspace-from-monitor') out.workspaceFromMonitor = true;
     else if (a === '-h' || a === '--help') out.help = true;
+    else if (a === '--phase') out.phase = argv[++i];
     else if (a === '--exit-code') out.exitCode = Number(argv[++i]);
     else if (a === '--check-json') out.checkJson = JSON.parse(argv[++i]);
     else if (a === '--open-prs-json') out.openPrsJson = JSON.parse(argv[++i]);
     else if (a === '--test-status-json') out.testStatusJson = JSON.parse(argv[++i]);
+    else if (a === '--pending-json') out.pendingJson = JSON.parse(argv[++i]);
+    else if (a === '--prep-json') out.prepJson = JSON.parse(argv[++i]);
+    else if (a === '--sync-json') out.syncJson = JSON.parse(argv[++i]);
+    else if (a === '--baseline-observation-id') out.baselineObservationId = argv[++i];
+    else if (a === '--main-observation-id') out.mainObservationId = argv[++i];
     else {
       console.error(`Unknown option: ${a}`);
       out.help = true;
     }
   }
-  if (out.decisionOnly && (out.exitCode == null || Number.isNaN(out.exitCode))) {
-    console.error('--decision-only requires --exit-code');
+  if (
+    out.decisionOnly &&
+    out.phase === 'watch' &&
+    (out.exitCode == null || Number.isNaN(out.exitCode))
+  ) {
+    console.error('--decision-only watch phase requires --exit-code');
     out.help = true;
   }
   return out;

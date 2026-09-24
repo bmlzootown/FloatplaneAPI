@@ -19,8 +19,8 @@
     "frontend-discover": "node tools/fp-frontend-watch/cli.mjs discover",
     "frontend-check": "node tools/fp-frontend-watch/cli.mjs check",
     "frontend-check-json": "node tools/fp-frontend-watch/cli.mjs check --json",
-    "frontend-monitor": "node tools/fp-frontend-watch/monitor-orchestrate.mjs --with-gh",
-    "frontend-monitor-json": "node tools/fp-frontend-watch/monitor-orchestrate.mjs --json --with-gh"
+    "frontend-monitor": "node tools/fp-frontend-watch/monitor-orchestrate.mjs",
+    "frontend-monitor-json": "node tools/fp-frontend-watch/monitor-orchestrate.mjs --json"
   },
   "repository": {
     "type": "git",

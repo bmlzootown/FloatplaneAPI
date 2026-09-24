@@ -7,12 +7,12 @@ node tools/fp-frontend-watch/cli.mjs discover
 node tools/fp-frontend-watch/cli.mjs check
 node --test tests/frontend-watch/frontend-watch.test.mjs tests/frontend-watch/monitor-orchestrate.test.mjs
 
-# Phase 1.2 — Automation decision JSON (watcher remains source of truth)
-node tools/fp-frontend-watch/monitor-orchestrate.mjs --json --with-gh
+# Phase 1.2 — cumulative pending ledger decision JSON (refreshes origin/main first)
+node tools/fp-frontend-watch/monitor-orchestrate.mjs --json --run-tests
 ```
 
 Layout: `artifacts/frontend/{buildId}/{observationId}/` with content-derived observation IDs, transactional staging→promote, durable in-repo entry/manifest bytes, HTTP timeouts, and lineage via `previousObservationId`.
 
-**Phase 1.2:** `monitor-orchestrate.mjs` + `automation/PROMPT.md` configure unattended Cursor Automation (6-hour cron) with duplicate-PR suppression on `cursor/frontend-observation`. See `automation/README.md`.
+**Phase 1.2:** `monitor-orchestrate.mjs` + `automation/PROMPT.md` configure unattended Cursor Automation (6-hour cron). Monitoring branch `cursor/frontend-observation` is a **cumulative pending ledger** (A→B→C on one PR). See `automation/README.md`.
 
 See the repository README section **Frontend deployment watch (Phase 1)**.
