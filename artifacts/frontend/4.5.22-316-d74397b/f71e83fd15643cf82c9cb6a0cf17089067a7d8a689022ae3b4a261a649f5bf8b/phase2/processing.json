@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "orchestratorId": "phase2.3-frontend-evidence-orchestrate",
+  "orchestratorVersion": "2.3.1",
+  "observationId": "f71e83fd15643cf82c9cb6a0cf17089067a7d8a689022ae3b4a261a649f5bf8b",
+  "buildId": "4.5.22-316-d74397b",
+  "previousObservationId": null,
+  "existence": "exists",
+  "extract": {
+    "status": "complete",
+    "closureStatus": "complete_with_external_rejects",
+    "extractedAt": "2026-09-24T17:45:37.450Z",
+    "error": null,
+    "refuseRemoval": false
+  },
+  "comparison": {
+    "status": "not_applicable",
+    "fromObservationId": null,
+    "comparisonStatus": null,
+    "diffRelPath": null,
+    "comparedAt": null,
+    "error": null,
+    "summaryCounts": null
+  },
+  "updatedAt": "2026-09-24T20:39:22.704Z"
+}

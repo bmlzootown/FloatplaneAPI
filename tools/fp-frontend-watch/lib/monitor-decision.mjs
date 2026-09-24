@@ -18,6 +18,9 @@ import {
   OBSERVE_COMMIT_PREFIX,
   PR_TITLE_PREFIX,
 } from './monitor-constants.mjs';
+import {
+  classifyMonitoringPathDiffs,
+} from '../../fp-frontend-evidence/lib/orchestrate/decision.mjs';
 
 /**
  * @typedef {object} OpenMonitorPr
@@ -169,12 +172,15 @@ export function assessPendingLedger({
   landingModeHint = 'unknown',
 }) {
   const diffs = monitoringPathDiffs.filter(Boolean);
+  const pathClass = classifyMonitoringPathDiffs(diffs);
   const sameObservation =
     mainObservationId != null &&
     monitorTipObservationId != null &&
     mainObservationId === monitorTipObservationId;
 
   // Primary: same tip observationId + no monitoring-path content unique to monitor.
+  // Phase 2-owned paths (evidence, diffs, processing index) count as unique pending —
+  // analysis-only pending must survive cleanup when Phase 1 observationIds already match.
   if (sameObservation && diffs.length === 0) {
     return {
       hasUniquePending: false,
@@ -186,10 +192,13 @@ export function assessPendingLedger({
       mainObservationId,
       monitorTipObservationId,
       monitoringPathDiffs: diffs,
+      phase2PathDiffs: [],
+      phase2OnlyPending: false,
       landingModeHint,
       ancestryCommitsAhead: commitsAheadOfMain,
       notes: [
         'main and monitoring tip share the same observationId with no monitoring-path diffs.',
+        'Phase 1 state and all Phase 2 artifacts match main — cleanup/reset allowed.',
         'Branch is fully landed regardless of ancestry (merge/squash/rebase safe).',
         commitsAheadOfMain > 0
           ? `Ancestry still shows ${commitsAheadOfMain} commit(s) ahead — ignored for pending uniqueness.`
@@ -199,18 +208,27 @@ export function assessPendingLedger({
   }
 
   if (sameObservation && diffs.length > 0) {
+    const phase2Only = pathClass.hasPhase2OnlyPending;
     return {
       hasUniquePending: true,
       fullyLanded: false,
       allowResetFromMain: false,
-      reason: 'same_observation_but_monitoring_path_diffs',
+      reason: phase2Only
+        ? 'phase2_analysis_pending_survives_cleanup'
+        : 'same_observation_but_monitoring_path_diffs',
       mainObservationId,
       monitorTipObservationId,
       monitoringPathDiffs: diffs,
+      phase2PathDiffs: pathClass.phase2Paths,
+      phase2OnlyPending: phase2Only,
       landingModeHint,
       ancestryCommitsAhead: commitsAheadOfMain,
       notes: [
-        'observationIds match but monitoring paths still differ from main — refuse reset.',
+        phase2Only
+          ? 'Phase 1 observationIds match but Phase 2 evidence/reports still unique on monitor — refuse cleanup/reset.'
+          : 'observationIds match but monitoring paths still differ from main — refuse reset.',
+        'Cleanup/reset only when Phase 1 state AND all successfully committed Phase 2 artifacts are on main.',
+        'Content/observationId based — not ancestry alone (squash/rebase safe).',
       ],
     };
   }

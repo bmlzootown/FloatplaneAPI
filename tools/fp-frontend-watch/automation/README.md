@@ -1,4 +1,4 @@
-# Cursor Automation — Floatplane frontend watch (Phase 1.2)
+# Cursor Automation — Floatplane frontend watch (Phase 1.2 / Phase 2.3)
 
 Unattended Cursor Automation every **6 hours** against `bmlzootown/FloatplaneAPI`.
 
@@ -8,53 +8,37 @@ Unattended Cursor Automation every **6 hours** against `bmlzootown/FloatplaneAPI
 
 | File | Purpose |
 |------|---------|
-| `PROMPT.md` | Paste into the Automation prompt field |
+| `PROMPT.md` | **Live** Automation prompt (Phase 1.2 only) — do not change until Phase 2.3 is reviewed |
+| `PROMPT.phase-2-3.proposed.md` | **Proposed** Phase 1.2+2.3 prompt — activate only after merge + explicit approval |
 | `README.md` | This file — enable/test steps |
 
-## Enable in Cursor UI (do not activate until ready)
+## Enable in Cursor UI (do not activate Phase 2.3 until ready)
 
-1. Merge Phase 1.1 and Phase 1.2 to `main`.
-2. Open [cursor.com/automations](https://cursor.com/automations) → **New automation**.
-3. **Trigger:** Scheduled → cron `0 */6 * * *` (UTC). Runs may delay but will not start early.
-4. **Repository:** Single repo `bmlzootown/FloatplaneAPI`, branch **`main`**. Cron defaults to *no* repository — attach explicitly.
-5. **Tools:** Keep **Pull request creation** enabled. Do **not** enable auto-merge. Do not rely on Memories for ledger state.
-6. **Extra safeguard:** If the UI offers “always update stale build” / environment staleness refresh, enable it — orchestration still performs explicit `git fetch` every run.
-7. **Prompt:** paste the full contents of `PROMPT.md`.
-8. Save. **Do not activate** until Brandon explicitly enables it. Manual test run first when activating later.
+1. Merge Phase 1.1 and Phase 1.2 to `main` (done). Phase 2.3 lands via its own draft PR.
+2. Open [cursor.com/automations](https://cursor.com/automations) → existing frontend watch automation.
+3. **Trigger:** Scheduled → cron `0 */6 * * *` (UTC).
+4. **Repository:** Single repo `bmlzootown/FloatplaneAPI`, branch **`main`**.
+5. **Tools:** Keep **Pull request creation** enabled. Do **not** enable auto-merge.
+6. **Prompt:** keep live `PROMPT.md` until Phase 2.3 is approved; then replace with `PROMPT.phase-2-3.proposed.md`.
+7. Save. **Do not activate Phase 2.3 prompt** until Brandon explicitly enables it.
 
-## gh / auth
+## Scheduled command
 
-Monitoring correctness uses **fetched git refs** (pending commits on `cursor/frontend-observation`). `gh` / `--with-gh` is optional. Prefer Cursor native GitHub/PR tooling for opening/updating the PR. No PAT required for the decision path.
+| Mode | Command |
+|------|---------|
+| Live (Phase 1.2 only) | `node tools/fp-frontend-watch/monitor-orchestrate.mjs --json` |
+| After Phase 2.3 activation | `node tools/fp-frontend-watch/monitor-phase2-orchestrate.mjs --json` |
 
-## Terraform sketch (optional)
-
-```hcl
-resource "cursor_platform_workflow" "floatplane_frontend_watch" {
-  name        = "Floatplane frontend observation"
-  description = "Phase 1.2: every 6h cumulative pending ledger"
-  enabled     = false # leave disabled until explicitly activated
-  prompt      = file("${path.module}/PROMPT.md")
-  git_repo    = "github.com/bmlzootown/FloatplaneAPI"
-  git_branch  = "main"
-
-  trigger = [{ cron = { schedule = "0 */6 * * *" } }]
-  action  = [{ git_pr = {} }]
-}
-```
-
-## Scheduled vs local
-
-- **Scheduled Automation** (every 6h): refresh SCM via the orchestrator, then
-  `node tools/fp-frontend-watch/monitor-orchestrate.mjs --json` (no `--run-tests`).
-  Follow the decision JSON. Do not run offline tests every cycle.
-- **Local / CI:** `make frontend-watch-test` (or `--run-tests`) remains required before
-  merging orchestration changes. Not part of the routine cron path.
+Do **not** pass `--run-tests` on routine cycles.
 
 ```sh
 # Offline tests (local/CI only)
 make frontend-watch-test
+make frontend-phase2-orch-test
 
-# Same command the Automation should use
+# Phase 1.2 only
 make frontend-monitor-json
-# or: node tools/fp-frontend-watch/monitor-orchestrate.mjs --json
+
+# Phase 2.3 unified (local trial; subscription still Phase 1.2 until prompt swap)
+make frontend-monitor-phase2-json
 ```

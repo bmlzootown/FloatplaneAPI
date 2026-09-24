@@ -1,10 +1,11 @@
 /**
- * Factual Phase 1 PR body for the cumulative pending observation ledger.
- * Summarizes ALL pending observations, not only the newest.
+ * Factual Phase 1 (+ optional Phase 2.3 analysis) PR body for the cumulative
+ * pending observation ledger. Summarizes ALL pending observations.
  * Never claims API / OpenAPI / AsyncAPI / Hydravion changes.
  */
 
 import { PR_BODY_MARKERS } from './monitor-constants.mjs';
+import { formatAnalysisPrSection } from '../../fp-frontend-evidence/lib/orchestrate/pr-analysis.mjs';
 
 /**
  * @param {object} input
@@ -14,6 +15,8 @@ import { PR_BODY_MARKERS } from './monitor-constants.mjs';
  * @param {object|null} [input.testStatus]
  * @param {string[]} [input.extraNotes]
  * @param {string|null} [input.mainObservationId]
+ * @param {object[]} [input.phase2Analyses]
+ * @param {boolean} [input.includePhase2]
  */
 export function formatObservationPrBody({
   pendingObservations = [],
@@ -22,6 +25,8 @@ export function formatObservationPrBody({
   testStatus = null,
   extraNotes = [],
   mainObservationId = null,
+  phase2Analyses = null,
+  includePhase2 = false,
 }) {
   const pending = pendingObservations.length
     ? pendingObservations
@@ -41,11 +46,20 @@ export function formatObservationPrBody({
 
   const latest = pending[pending.length - 1] || latestCheckSummary || {};
   const tests = testStatus || latestCheckSummary?.testStatus || null;
+  const withPhase2 =
+    includePhase2 ||
+    (Array.isArray(phase2Analyses) && phase2Analyses.length > 0);
   const lines = [];
 
-  lines.push('## Floatplane frontend observation (Phase 1 only)');
+  lines.push(
+    withPhase2
+      ? '## Floatplane frontend observation (Phase 1 + Phase 2 evidence analysis)'
+      : '## Floatplane frontend observation (Phase 1 only)',
+  );
   lines.push('');
-  lines.push(PR_BODY_MARKERS.phase);
+  lines.push(
+    withPhase2 ? PR_BODY_MARKERS.phaseWithEvidence : PR_BODY_MARKERS.phase,
+  );
   lines.push(`${PR_BODY_MARKERS.pendingCount} ${pending.length}`);
   lines.push(`${PR_BODY_MARKERS.buildId} ${latest.buildId ?? '(unknown)'}`);
   lines.push(`${PR_BODY_MARKERS.observationId} ${latest.observationId ?? '(unknown)'}`);
@@ -92,6 +106,10 @@ export function formatObservationPrBody({
     });
   }
 
+  if (withPhase2) {
+    lines.push(formatAnalysisPrSection(phase2Analyses || []));
+  }
+
   lines.push('### Latest watcher result');
   lines.push('');
   lines.push(`- ${watcherResult}`);
@@ -110,12 +128,18 @@ export function formatObservationPrBody({
     );
     if (tests.detail) lines.push(`- detail: ${tests.detail}`);
   } else {
-    lines.push('- frontend-watch-test: run by automation agent before opening/updating this PR');
+    lines.push(
+      '- Scheduled runs do **not** execute the full unit suite every cycle; offline suites are local/CI only.',
+    );
   }
   lines.push('');
   lines.push('### Scope boundaries');
   lines.push('');
-  lines.push('- Phase 1 frontend observation only.');
+  lines.push(
+    withPhase2
+      ? '- Phase 1 observation + Phase 2 frontend-evidence extract/compare analysis.'
+      : '- Phase 1 frontend observation only.',
+  );
   lines.push('- This PR does **not** claim that the Floatplane HTTP/WebSocket API changed.');
   lines.push('- No OpenAPI, AsyncAPI, or Hydravion changes are included or implied.');
   lines.push('- Do not auto-merge; human review required.');
@@ -125,6 +149,14 @@ export function formatObservationPrBody({
   lines.push(
     '- While open, new deployments append to this same branch/PR (A→B→C). No force-reset from main.',
   );
+  if (withPhase2) {
+    lines.push(
+      '- Phase 1 Observe commits are durable: Phase 2 failure never rolls back an Observe commit.',
+    );
+    lines.push(
+      '- Phase 2 missing on main is backfilled via this monitoring/analysis branch — main history is never rewritten.',
+    );
+  }
 
   if (extraNotes.length) {
     lines.push('');

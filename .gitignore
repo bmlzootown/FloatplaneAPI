@@ -14,3 +14,4 @@
 /tests/frontend-watch/.tmp-watch/
 /tests/frontend-evidence/.tmp-evidence/
 /tests/frontend-evidence-diff/.tmp-diff/
+/tests/frontend-phase2-orchestrate/.tmp-phase2-orch/
