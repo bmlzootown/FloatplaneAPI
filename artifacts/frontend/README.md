@@ -28,9 +28,14 @@ phase2/
   chunks/js/…                 # reachable lazy JS bytes (~2.5MB for current build)
   api-evidence.json
   api-evidence.inventory.md
+  diffs/{fromObservationId}/  # Phase 2.2 semantic compare artifacts (optional)
+    evidence-diff.json
+    evidence-diff.md
+    status.json
 ```
 
 Phase 2 never changes `observationId` or Phase 1 compared artifacts. Run with
-`make frontend-evidence` (see `tools/fp-frontend-evidence/README.md`).
+`make frontend-evidence` / `make frontend-evidence-diff FROM=… TO=…`
+(see `tools/fp-frontend-evidence/README.md`).
 
 **Fresh clone:** open `state/last-known-frontend.json` → `artifactDir` → files on disk.
