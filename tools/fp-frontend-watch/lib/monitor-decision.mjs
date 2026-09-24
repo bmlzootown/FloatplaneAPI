@@ -4,6 +4,9 @@
  * main = authoritative merged history
  * cursor/frontend-observation = pending durable ledger (append-only while PR open)
  *
+ * Pending detection is observation-state/content based — NOT commit ancestry alone
+ * (squash/rebase merges break ancestry while main state already has the tip).
+ *
  * No git / network side effects here.
  */
 
@@ -54,6 +57,18 @@ import {
  * @property {string} [error]
  * @property {string} [layout]
  * @property {string} [statePath]
+ */
+
+/**
+ * @typedef {object} PendingLedgerAssessment
+ * @property {boolean} hasUniquePending
+ * @property {boolean} fullyLanded
+ * @property {boolean} allowResetFromMain
+ * @property {string} reason
+ * @property {string|null} mainObservationId
+ * @property {string|null} monitorTipObservationId
+ * @property {string[]} monitoringPathDiffs
+ * @property {string} [landingModeHint] merge|squash|rebase|unknown (informational)
  */
 
 /**
@@ -129,13 +144,150 @@ export function hasMonitoringConflict(conflictPaths = []) {
 }
 
 /**
+ * Assess unique pending observations using observation state/content as primary
+ * authority — independent of GitHub merge style (merge commit / squash / rebase).
+ *
+ * Ancestry-only signals (commitsAheadOfMain) are informational and MUST NOT alone
+ * decide that unique pending exists when observationIds already match and there
+ * are no monitoring-path diffs.
+ *
+ * @param {object} input
+ * @param {string|null} [input.mainObservationId]
+ * @param {string|null} [input.monitorTipObservationId]
+ * @param {string[]} [input.monitoringPathDiffs] paths under state/ or artifacts/frontend differing monitor→main
+ * @param {number} [input.commitsAheadOfMain] ancestry hint only
+ * @param {OpenMonitorPr|null} [input.openMonitorPr]
+ * @param {'merge'|'squash'|'rebase'|'unknown'} [input.landingModeHint]
+ * @returns {PendingLedgerAssessment}
+ */
+export function assessPendingLedger({
+  mainObservationId = null,
+  monitorTipObservationId = null,
+  monitoringPathDiffs = [],
+  commitsAheadOfMain = 0,
+  openMonitorPr = null,
+  landingModeHint = 'unknown',
+}) {
+  const diffs = monitoringPathDiffs.filter(Boolean);
+  const sameObservation =
+    mainObservationId != null &&
+    monitorTipObservationId != null &&
+    mainObservationId === monitorTipObservationId;
+
+  // Primary: same tip observationId + no monitoring-path content unique to monitor.
+  if (sameObservation && diffs.length === 0) {
+    return {
+      hasUniquePending: false,
+      fullyLanded: true,
+      // Never reset solely because a PR is "merged"; require state proof (this branch).
+      // Also do not force-reset remote while an open monitoring PR still exists.
+      allowResetFromMain: !openMonitorPr,
+      reason: 'observation_state_matches_main',
+      mainObservationId,
+      monitorTipObservationId,
+      monitoringPathDiffs: diffs,
+      landingModeHint,
+      ancestryCommitsAhead: commitsAheadOfMain,
+      notes: [
+        'main and monitoring tip share the same observationId with no monitoring-path diffs.',
+        'Branch is fully landed regardless of ancestry (merge/squash/rebase safe).',
+        commitsAheadOfMain > 0
+          ? `Ancestry still shows ${commitsAheadOfMain} commit(s) ahead — ignored for pending uniqueness.`
+          : 'Ancestry also shows no commits ahead of main.',
+      ],
+    };
+  }
+
+  if (sameObservation && diffs.length > 0) {
+    return {
+      hasUniquePending: true,
+      fullyLanded: false,
+      allowResetFromMain: false,
+      reason: 'same_observation_but_monitoring_path_diffs',
+      mainObservationId,
+      monitorTipObservationId,
+      monitoringPathDiffs: diffs,
+      landingModeHint,
+      ancestryCommitsAhead: commitsAheadOfMain,
+      notes: [
+        'observationIds match but monitoring paths still differ from main — refuse reset.',
+      ],
+    };
+  }
+
+  if (
+    monitorTipObservationId &&
+    mainObservationId &&
+    monitorTipObservationId !== mainObservationId
+  ) {
+    return {
+      hasUniquePending: true,
+      fullyLanded: false,
+      allowResetFromMain: false,
+      reason: 'monitor_tip_observation_differs',
+      mainObservationId,
+      monitorTipObservationId,
+      monitoringPathDiffs: diffs,
+      landingModeHint,
+      ancestryCommitsAhead: commitsAheadOfMain,
+      notes: [
+        'Monitoring tip observationId differs from main — unique pending ledger content.',
+      ],
+    };
+  }
+
+  // Monitor exists but tip state missing / main missing — fail closed on uniqueness.
+  if (monitorTipObservationId && !mainObservationId) {
+    return {
+      hasUniquePending: true,
+      fullyLanded: false,
+      allowResetFromMain: false,
+      reason: 'main_observation_missing',
+      mainObservationId,
+      monitorTipObservationId,
+      monitoringPathDiffs: diffs,
+      landingModeHint,
+      ancestryCommitsAhead: commitsAheadOfMain,
+    };
+  }
+
+  if (!monitorTipObservationId && diffs.length > 0) {
+    return {
+      hasUniquePending: true,
+      fullyLanded: false,
+      allowResetFromMain: false,
+      reason: 'monitoring_path_diffs_without_tip_state',
+      mainObservationId,
+      monitorTipObservationId,
+      monitoringPathDiffs: diffs,
+      landingModeHint,
+      ancestryCommitsAhead: commitsAheadOfMain,
+    };
+  }
+
+  // No monitor tip observation and no diffs → nothing unique pending.
+  return {
+    hasUniquePending: Boolean(openMonitorPr) && !sameObservation,
+    fullyLanded: !openMonitorPr,
+    allowResetFromMain: !openMonitorPr,
+    reason: openMonitorPr ? 'open_pr_without_clear_tip_delta' : 'no_unique_pending',
+    mainObservationId,
+    monitorTipObservationId,
+    monitoringPathDiffs: diffs,
+    landingModeHint,
+    ancestryCommitsAhead: commitsAheadOfMain,
+  };
+}
+
+/**
  * Decide workspace preparation after an explicit SCM refresh.
  *
  * @param {object} input
  * @param {boolean} input.fetchOk
  * @param {string} [input.fetchError]
  * @param {boolean} [input.monitorBranchExists]
- * @param {boolean} [input.monitorHasPendingCommits] commits on monitor not in main
+ * @param {PendingLedgerAssessment|null} [input.pendingAssessment] preferred (state-based)
+ * @param {boolean} [input.monitorHasPendingCommits] legacy ancestry-only; ignored when assessment present
  * @param {string|null} [input.mainObservationId]
  * @param {string|null} [input.monitorTipObservationId]
  * @param {PendingObservation[]} [input.pendingObservations]
@@ -145,6 +297,7 @@ export function decideWorkspacePrep({
   fetchOk,
   fetchError = null,
   monitorBranchExists = false,
+  pendingAssessment = null,
   monitorHasPendingCommits = false,
   mainObservationId = null,
   monitorTipObservationId = null,
@@ -166,12 +319,27 @@ export function decideWorkspacePrep({
     };
   }
 
-  const hasPending =
-    monitorHasPendingCommits ||
-    pendingObservations.length > 0 ||
-    Boolean(openMonitorPr);
+  const assessment =
+    pendingAssessment ||
+    assessPendingLedger({
+      mainObservationId,
+      monitorTipObservationId,
+      monitoringPathDiffs: [],
+      // Fallback only when caller did not assess paths; ancestry alone is insufficient
+      // to claim unique pending once observationIds match — see assessPendingLedger.
+      commitsAheadOfMain: monitorHasPendingCommits ? 1 : 0,
+      openMonitorPr,
+    });
 
-  if (monitorBranchExists && hasPending) {
+  const useMonitor =
+    monitorBranchExists &&
+    (assessment.hasUniquePending ||
+      pendingObservations.length > 0 ||
+      (Boolean(openMonitorPr) &&
+        monitorTipObservationId &&
+        monitorTipObservationId !== mainObservationId));
+
+  if (useMonitor) {
     return {
       schemaVersion: 2,
       action: 'use_monitor_branch',
@@ -183,42 +351,54 @@ export function decideWorkspacePrep({
       expectedBaselineObservationId: monitorTipObservationId,
       mainObservationId,
       pendingObservations,
+      pendingAssessment: assessment,
       openMonitorPr: summarizePr(openMonitorPr),
       monitorBranch: MONITOR_BRANCH,
       defaultBranch: DEFAULT_BRANCH,
+      resetMonitorFromMain: false,
+      allowForceWithLeaseReset: false,
       notes: [
-        'Pending observation ledger exists on the monitoring branch.',
+        'Unique pending observation content exists on the monitoring branch (state/content authority).',
         'Merge newest origin/main into the monitoring branch before watching.',
         'Watcher comparison baseline = latest successful observation on the monitoring tip.',
       ],
     };
   }
 
-  // No pending ledger — work from main. Reset orphan monitoring tip only when safe.
+  const allowReset =
+    monitorBranchExists &&
+    assessment.fullyLanded &&
+    assessment.allowResetFromMain &&
+    !openMonitorPr;
+
   return {
     schemaVersion: 2,
     action: 'use_main',
     reason: monitorBranchExists
-      ? 'monitor_fully_merged_or_empty'
+      ? assessment.fullyLanded
+        ? 'monitor_fully_landed_by_observation_state'
+        : 'monitor_present_without_unique_pending'
       : 'no_monitor_branch',
     runWatcher: true,
     checkout: DEFAULT_BRANCH,
     syncMainFirst: false,
-    resetMonitorFromMain:
-      monitorBranchExists && !monitorHasPendingCommits && !openMonitorPr,
+    resetMonitorFromMain: allowReset,
+    // Non-FF reset of monitoring tip is allowed only after state proof of no unique pending.
+    allowForceWithLeaseReset: allowReset,
     baselineSource: 'main',
     expectedBaselineObservationId: mainObservationId,
     mainObservationId,
     pendingObservations: [],
+    pendingAssessment: assessment,
     openMonitorPr: summarizePr(openMonitorPr),
     monitorBranch: MONITOR_BRANCH,
     defaultBranch: DEFAULT_BRANCH,
     notes: [
-      'No pending observation commits absent from main.',
+      'No unique pending observations vs main (observationId + monitoring-path authority).',
       'Checkout main as authoritative baseline.',
-      monitorBranchExists && !openMonitorPr
-        ? 'Monitoring branch may be reset from main only when it has no pending commits.'
-        : 'Create monitoring branch from main only when a new observation must be committed.',
+      allowReset
+        ? 'Safe to recreate/reset monitoring branch from current main (force-with-lease only if non-FF), because unique pending was disproven by state — not merely by PR merged status or ancestry.'
+        : 'Do not discard/reset monitoring branch without state proof of no unique pending.',
     ],
   };
 }
@@ -292,6 +472,115 @@ export function decideAfterMainSync({
 }
 
 /**
+ * Reconcile a rejected (non-force) push of an observation commit when another
+ * Automation run may have raced ahead. Never force-pushes observation commits.
+ *
+ * @param {object} input
+ * @param {boolean} input.pushRejected
+ * @param {string|null} input.localObservationId observation this run tried to publish
+ * @param {string|null} [input.localPreviousObservationId]
+ * @param {string|null} input.remoteTipObservationIdAfterFetch
+ * @param {string[]} [input.remoteLedgerObservationIds] observationIds known on remote tip ledger
+ * @param {boolean} [input.refetchOk]
+ * @param {string} [input.refetchError]
+ */
+export function decidePushRace({
+  pushRejected,
+  localObservationId = null,
+  localPreviousObservationId = null,
+  remoteTipObservationIdAfterFetch = null,
+  remoteLedgerObservationIds = [],
+  refetchOk = true,
+  refetchError = null,
+}) {
+  if (!pushRejected) {
+    return {
+      action: 'success',
+      reason: 'push_ok',
+      forcePush: false,
+      discardLocalMutation: false,
+      createPullRequest: false,
+      preserveLineage: true,
+    };
+  }
+
+  if (!refetchOk) {
+    return {
+      action: 'abort',
+      reason: 'push_race_refetch_failed',
+      forcePush: false,
+      discardLocalMutation: true,
+      error: refetchError || 'Push rejected and refetch of monitoring branch failed',
+      notes: [
+        'Fail closed. Do not force-push. Do not invent reconciliation without a fresh remote tip.',
+      ],
+    };
+  }
+
+  const remoteIds = new Set(
+    (remoteLedgerObservationIds || []).filter(Boolean).concat(
+      remoteTipObservationIdAfterFetch ? [remoteTipObservationIdAfterFetch] : [],
+    ),
+  );
+
+  // Remote already has this run's observation (same discovery race).
+  if (localObservationId && remoteIds.has(localObservationId)) {
+    return {
+      action: 'noop',
+      reason: 'remote_already_has_observation',
+      forcePush: false,
+      discardLocalMutation: true,
+      createPullRequest: false,
+      updatePullRequest: true,
+      remoteTipObservationId: remoteTipObservationIdAfterFetch,
+      preserveLineage: true,
+      notes: [
+        'Another run published the same observationId first (or remote already matches).',
+        'Treat as success/no-op. Do not force-push. Do not open a duplicate PR.',
+      ],
+    };
+  }
+
+  // Remote advanced to a different / newer observation.
+  if (
+    remoteTipObservationIdAfterFetch &&
+    localObservationId &&
+    remoteTipObservationIdAfterFetch !== localObservationId
+  ) {
+    return {
+      action: 'reevaluate_from_remote',
+      reason: 'remote_advanced_different_observation',
+      forcePush: false,
+      discardLocalMutation: true,
+      createPullRequest: false,
+      newBaselineObservationId: remoteTipObservationIdAfterFetch,
+      localObservationId,
+      localPreviousObservationId,
+      preserveLineage: true,
+      notes: [
+        'Remote monitoring tip advanced to a different observationId.',
+        'Discard this run\'s stale local mutation. Reevaluate from the fetched remote tip.',
+        'Do not overwrite the other run\'s observation. Do not rewrite B→C as B→D while dropping C.',
+        'Never force-push normal observation commits.',
+      ],
+    };
+  }
+
+  // Cannot reconcile deterministically.
+  return {
+    action: 'abort',
+    reason: 'push_race_unreconciled',
+    forcePush: false,
+    discardLocalMutation: true,
+    createPullRequest: false,
+    error: 'Push rejected and remote tip could not be reconciled with local observationId',
+    notes: [
+      'Fail closed. Do not force-push. Do not create a competing history or duplicate PR.',
+    ],
+  };
+}
+
+/**
  * Decide action after the watcher runs against the prepared baseline.
  *
  * @param {object} input
@@ -328,6 +617,7 @@ export function decideMonitorAction({
       updatePullRequest: false,
       appendObservationCommit: false,
       mutateDefaultBranch: false,
+      forcePush: false,
       notes: [
         'Live frontend matches the prepared baseline (main or pending ledger tip).',
         'No observation commit, no PR mutation, quiet success.',
@@ -355,6 +645,7 @@ export function decideMonitorAction({
       appendObservationCommit: false,
       mutateDefaultBranch: false,
       mutateLastKnownGood: false,
+      forcePush: false,
       notes: [
         'Watcher exit 1: do not append an observation commit; do not mutate the monitoring PR.',
         'Pending ledger and main LKG remain as they were before this run.',
@@ -373,6 +664,7 @@ export function decideMonitorAction({
       createPullRequest: false,
       appendObservationCommit: false,
       mutateDefaultBranch: false,
+      forcePush: false,
       notes: ['Treat as operational failure; do not open or update an observation PR.'],
     };
   }
@@ -395,6 +687,7 @@ export function decideMonitorAction({
       createPullRequest: false,
       appendObservationCommit: false,
       mutateDefaultBranch: false,
+      forcePush: false,
       notes: ['Do not invent observation metadata; fail closed.'],
     };
   }
@@ -416,6 +709,7 @@ export function decideMonitorAction({
       createPullRequest: false,
       appendObservationCommit: false,
       mutateDefaultBranch: false,
+      forcePush: false,
       notes: [
         'Refuse to commit an observation whose lineage does not match the prepared ledger tip.',
       ],
@@ -442,6 +736,7 @@ export function decideMonitorAction({
       appendObservationCommit: false,
       discardWorkingTreeChanges: true,
       mutateDefaultBranch: false,
+      forcePush: false,
       notes: [
         'Latest pending ledger observation already matches this observationId.',
         'Do not append a duplicate commit. Do not open a second PR.',
@@ -464,7 +759,6 @@ export function decideMonitorAction({
   ];
 
   const prTitle = `${PR_TITLE_PREFIX} ${buildId}`;
-  // If we already have pending or an open PR, always update; first observation opens.
   const finalAction =
     monitorPr || pendingObservations.length > 0 || workspaceFromMonitor
       ? 'update_monitor_pr'
@@ -494,11 +788,13 @@ export function decideMonitorAction({
     commitMessage: `${OBSERVE_COMMIT_PREFIX} ${buildId}`,
     monitorBranch: MONITOR_BRANCH,
     defaultBranch: DEFAULT_BRANCH,
+    pushRacePolicy: 'fetch_and_reconcile_never_force_observation_push',
     notes: [
       pendingObservations.length > 0
         ? `Append observation ${observationId.slice(0, 12)}… after pending tip (previousObservationId must be the prior pending observation).`
         : 'Start pending ledger from main: create monitoring branch, commit this observation, open one PR.',
-      'Push normally (fast-forward). Do not force-reset the monitoring branch from main while pending commits exist.',
+      'Push normally (fast-forward only for observation commits). Never force-push observation commits.',
+      'If push is rejected because remote advanced: fetch, reconcile via decidePushRace, never overwrite another run.',
       'Update the same monitoring PR; at most one open monitoring PR.',
       'PR body must summarize all pending observations, not only the newest.',
       'Do not auto-merge. Do not claim API changed. Phase 1 only.',

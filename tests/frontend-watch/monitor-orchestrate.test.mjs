@@ -6,8 +6,10 @@ import {
   PR_TITLE_PREFIX,
 } from '../../tools/fp-frontend-watch/lib/monitor-constants.mjs';
 import {
+  assessPendingLedger,
   decideAfterMainSync,
   decideMonitorAction,
+  decidePushRace,
   decideWorkspacePrep,
   hasMonitoringConflict,
   parseObservationIdFromPrBody,
@@ -19,6 +21,7 @@ import { formatObservationPrBody } from '../../tools/fp-frontend-watch/lib/monit
 const OBS_A = 'a'.repeat(64);
 const OBS_B = 'b'.repeat(64);
 const OBS_C = 'c'.repeat(64);
+const OBS_D = 'd'.repeat(64);
 
 function obs(id, buildId, previousObservationId, extras = {}) {
   return {
@@ -61,12 +64,30 @@ function openPrFor(observationId, buildId) {
   };
 }
 
+/** After A→B→C pending, main has C via any landing style. */
+function landedAssessment(mode) {
+  return assessPendingLedger({
+    mainObservationId: OBS_C,
+    monitorTipObservationId: OBS_C,
+    monitoringPathDiffs: [],
+    // Squash/rebase often leave ancestry "ahead" even though state matches.
+    commitsAheadOfMain: mode === 'merge' ? 0 : 3,
+    openMonitorPr: null,
+    landingModeHint: mode,
+  });
+}
+
 describe('Phase 1.2 cumulative ledger — required orchestration cases', () => {
   it('1. main A; Floatplane A → noop', () => {
     const prep = decideWorkspacePrep({
       fetchOk: true,
       monitorBranchExists: false,
-      monitorHasPendingCommits: false,
+      pendingAssessment: assessPendingLedger({
+        mainObservationId: OBS_A,
+        monitorTipObservationId: null,
+        monitoringPathDiffs: [],
+        commitsAheadOfMain: 0,
+      }),
       mainObservationId: OBS_A,
       monitorTipObservationId: null,
       pendingObservations: [],
@@ -112,7 +133,13 @@ describe('Phase 1.2 cumulative ledger — required orchestration cases', () => {
     const prep = decideWorkspacePrep({
       fetchOk: true,
       monitorBranchExists: true,
-      monitorHasPendingCommits: true,
+      pendingAssessment: assessPendingLedger({
+        mainObservationId: OBS_A,
+        monitorTipObservationId: OBS_B,
+        monitoringPathDiffs: ['state/last-known-frontend.json'],
+        commitsAheadOfMain: 1,
+        openMonitorPr: openPrFor(OBS_B, '2.0.0'),
+      }),
       mainObservationId: OBS_A,
       monitorTipObservationId: OBS_B,
       pendingObservations: [obs(OBS_B, '2.0.0', OBS_A)],
@@ -171,7 +198,7 @@ describe('Phase 1.2 cumulative ledger — required orchestration cases', () => {
   it('5b. rejects lineage that skips pending tip (would be A→C)', () => {
     const d = decideMonitorAction({
       exitCode: EXIT.CHANGED,
-      checkResult: changePayload(OBS_C, '3.0.0', OBS_A), // wrong: previous should be B
+      checkResult: changePayload(OBS_C, '3.0.0', OBS_A),
       baselineObservationId: OBS_B,
       pendingObservations: [obs(OBS_B, '2.0.0', OBS_A)],
       openMonitorPr: openPrFor(OBS_B, '2.0.0'),
@@ -183,10 +210,14 @@ describe('Phase 1.2 cumulative ledger — required orchestration cases', () => {
   });
 
   it('6. pending B+C merged → next C run noop from main', () => {
+    const assessment = landedAssessment('merge');
+    assert.equal(assessment.fullyLanded, true);
+    assert.equal(assessment.hasUniquePending, false);
+
     const prep = decideWorkspacePrep({
       fetchOk: true,
       monitorBranchExists: true,
-      monitorHasPendingCommits: false,
+      pendingAssessment: assessment,
       mainObservationId: OBS_C,
       monitorTipObservationId: OBS_C,
       pendingObservations: [],
@@ -194,6 +225,7 @@ describe('Phase 1.2 cumulative ledger — required orchestration cases', () => {
     });
     assert.equal(prep.action, 'use_main');
     assert.equal(prep.resetMonitorFromMain, true);
+    assert.equal(prep.allowForceWithLeaseReset, true);
 
     const d = decideMonitorAction({
       exitCode: EXIT.UNCHANGED,
@@ -209,7 +241,13 @@ describe('Phase 1.2 cumulative ledger — required orchestration cases', () => {
     const prep = decideWorkspacePrep({
       fetchOk: true,
       monitorBranchExists: true,
-      monitorHasPendingCommits: true,
+      pendingAssessment: assessPendingLedger({
+        mainObservationId: OBS_A,
+        monitorTipObservationId: OBS_B,
+        monitoringPathDiffs: ['state/last-known-frontend.json'],
+        commitsAheadOfMain: 1,
+        openMonitorPr: openPrFor(OBS_B, '2.0.0'),
+      }),
       mainObservationId: OBS_A,
       monitorTipObservationId: OBS_B,
       pendingObservations: [obs(OBS_B, '2.0.0', OBS_A)],
@@ -225,7 +263,6 @@ describe('Phase 1.2 cumulative ledger — required orchestration cases', () => {
     });
     assert.equal(sync.action, 'continue');
     assert.equal(sync.runWatcher, true);
-    // Pending B retained in prep; watcher baseline remains B.
     assert.equal(prep.expectedBaselineObservationId, OBS_B);
   });
 
@@ -269,6 +306,190 @@ describe('Phase 1.2 cumulative ledger — required orchestration cases', () => {
     assert.equal(d.updatePullRequest, false);
     assert.equal(d.mutateLastKnownGood, false);
     assert.equal(d.openMonitorPr.number, 42);
+  });
+});
+
+describe('Phase 1.2 post-merge cleanup — merge/squash/rebase landing', () => {
+  for (const mode of /** @type {const} */ (['merge', 'squash', 'rebase'])) {
+    it(`${mode}-equivalent landing: main=C, no unique pending, Floatplane=C → noop + safe reset`, () => {
+      const assessment = landedAssessment(mode);
+      assert.equal(assessment.fullyLanded, true);
+      assert.equal(assessment.hasUniquePending, false);
+      assert.equal(assessment.allowResetFromMain, true);
+      assert.equal(assessment.reason, 'observation_state_matches_main');
+      if (mode !== 'merge') {
+        assert.ok(assessment.ancestryCommitsAhead > 0);
+      }
+
+      const prep = decideWorkspacePrep({
+        fetchOk: true,
+        monitorBranchExists: true,
+        pendingAssessment: assessment,
+        mainObservationId: OBS_C,
+        monitorTipObservationId: OBS_C,
+        pendingObservations: [],
+        openMonitorPr: null,
+      });
+      assert.equal(prep.action, 'use_main');
+      assert.equal(prep.resetMonitorFromMain, true);
+      assert.equal(prep.allowForceWithLeaseReset, true);
+
+      const d = decideMonitorAction({
+        exitCode: EXIT.UNCHANGED,
+        checkResult: { ok: true, changed: false, observationId: OBS_C, buildId: '3.0.0' },
+        baselineObservationId: OBS_C,
+        pendingObservations: [],
+      });
+      assert.equal(d.action, 'noop');
+    });
+  }
+
+  it('does not treat ancestry-ahead alone as unique pending when observationIds match', () => {
+    const assessment = assessPendingLedger({
+      mainObservationId: OBS_C,
+      monitorTipObservationId: OBS_C,
+      monitoringPathDiffs: [],
+      commitsAheadOfMain: 99,
+      openMonitorPr: null,
+      landingModeHint: 'squash',
+    });
+    assert.equal(assessment.hasUniquePending, false);
+    assert.equal(assessment.fullyLanded, true);
+  });
+
+  it('refuses reset when observationIds match but monitoring paths still differ', () => {
+    const assessment = assessPendingLedger({
+      mainObservationId: OBS_C,
+      monitorTipObservationId: OBS_C,
+      monitoringPathDiffs: ['artifacts/frontend/x/old.js'],
+      commitsAheadOfMain: 0,
+      openMonitorPr: null,
+    });
+    assert.equal(assessment.hasUniquePending, true);
+    assert.equal(assessment.allowResetFromMain, false);
+  });
+
+  it('never discards monitoring solely because a PR looks merged while tip still differs', () => {
+    const assessment = assessPendingLedger({
+      mainObservationId: OBS_A,
+      monitorTipObservationId: OBS_C,
+      monitoringPathDiffs: ['state/last-known-frontend.json'],
+      commitsAheadOfMain: 0,
+      openMonitorPr: null,
+    });
+    assert.equal(assessment.hasUniquePending, true);
+    assert.equal(assessment.allowResetFromMain, false);
+
+    const prep = decideWorkspacePrep({
+      fetchOk: true,
+      monitorBranchExists: true,
+      pendingAssessment: assessment,
+      mainObservationId: OBS_A,
+      monitorTipObservationId: OBS_C,
+      pendingObservations: [obs(OBS_B, '2.0.0', OBS_A), obs(OBS_C, '3.0.0', OBS_B)],
+      openMonitorPr: null,
+    });
+    assert.equal(prep.action, 'use_monitor_branch');
+    assert.equal(prep.resetMonitorFromMain, false);
+    assert.equal(prep.allowForceWithLeaseReset, false);
+  });
+});
+
+describe('Phase 1.2 overlapping/racing Automation runs', () => {
+  it('two runs discover same observation; remote already has it → noop success', () => {
+    const race = decidePushRace({
+      pushRejected: true,
+      localObservationId: OBS_B,
+      localPreviousObservationId: OBS_A,
+      remoteTipObservationIdAfterFetch: OBS_B,
+      remoteLedgerObservationIds: [OBS_B],
+      refetchOk: true,
+    });
+    assert.equal(race.action, 'noop');
+    assert.equal(race.reason, 'remote_already_has_observation');
+    assert.equal(race.forcePush, false);
+    assert.equal(race.discardLocalMutation, true);
+    assert.equal(race.createPullRequest, false);
+  });
+
+  it('remote advances to same observation before push → success/no-op', () => {
+    const race = decidePushRace({
+      pushRejected: true,
+      localObservationId: OBS_C,
+      localPreviousObservationId: OBS_B,
+      remoteTipObservationIdAfterFetch: OBS_C,
+      remoteLedgerObservationIds: [OBS_B, OBS_C],
+      refetchOk: true,
+    });
+    assert.equal(race.action, 'noop');
+    assert.equal(race.forcePush, false);
+    assert.equal(race.preserveLineage, true);
+  });
+
+  it('remote advances to different/newer observation before push → reevaluate, never overwrite', () => {
+    const race = decidePushRace({
+      pushRejected: true,
+      localObservationId: OBS_C,
+      localPreviousObservationId: OBS_B,
+      remoteTipObservationIdAfterFetch: OBS_D,
+      remoteLedgerObservationIds: [OBS_B, OBS_D],
+      refetchOk: true,
+    });
+    assert.equal(race.action, 'reevaluate_from_remote');
+    assert.equal(race.reason, 'remote_advanced_different_observation');
+    assert.equal(race.forcePush, false);
+    assert.equal(race.discardLocalMutation, true);
+    assert.equal(race.newBaselineObservationId, OBS_D);
+    assert.equal(race.createPullRequest, false);
+    assert.match(race.notes.join('\n'), /Do not rewrite B→C as B→D/i);
+  });
+
+  it('push rejected and refetch fails → fail closed', () => {
+    const race = decidePushRace({
+      pushRejected: true,
+      localObservationId: OBS_C,
+      remoteTipObservationIdAfterFetch: null,
+      refetchOk: false,
+      refetchError: 'fetch failed',
+    });
+    assert.equal(race.action, 'abort');
+    assert.equal(race.reason, 'push_race_refetch_failed');
+    assert.equal(race.forcePush, false);
+  });
+
+  it('unreconciled race → fail closed (no competing history)', () => {
+    const race = decidePushRace({
+      pushRejected: true,
+      localObservationId: OBS_C,
+      remoteTipObservationIdAfterFetch: null,
+      remoteLedgerObservationIds: [],
+      refetchOk: true,
+    });
+    assert.equal(race.action, 'abort');
+    assert.equal(race.reason, 'push_race_unreconciled');
+    assert.equal(race.forcePush, false);
+    assert.equal(race.createPullRequest, false);
+  });
+
+  it('successful push path never requests force', () => {
+    const race = decidePushRace({
+      pushRejected: false,
+      localObservationId: OBS_B,
+      remoteTipObservationIdAfterFetch: OBS_B,
+    });
+    assert.equal(race.action, 'success');
+    assert.equal(race.forcePush, false);
+  });
+
+  it('append decision itself forbids force-push of observation commits', () => {
+    const d = decideMonitorAction({
+      exitCode: EXIT.CHANGED,
+      checkResult: changePayload(OBS_B, '2.0.0', OBS_A),
+      baselineObservationId: OBS_A,
+      pendingObservations: [],
+    });
+    assert.equal(d.forcePush, false);
+    assert.equal(d.pushRacePolicy, 'fetch_and_reconcile_never_force_observation_push');
   });
 });
 

@@ -68,9 +68,16 @@ No observation commit. No monitoring PR mutation. Report the error. Stop.
 
 ## After the monitoring PR merges
 
-- `main` is authoritative (A→B→C on main).
-- Next run uses main baseline. If Floatplane still matches tip → noop.
-- Recreate/reset `cursor/frontend-observation` from main **only** when it has no pending commits absent from main. Do not open a PR unless a new Floatplane observation appears.
+- `main` is authoritative. Pending uniqueness is decided by **observationId + monitoring-path diffs**, not ancestry and not “PR marked merged” alone.
+- Recreate/reset `cursor/frontend-observation` from main **only** when main tip observationId matches monitor tip and there are no unique `state/` / `artifacts/frontend/` diffs (works for merge, squash, and rebase landings).
+- Non-FF remote reset may use `--force-with-lease` only after that proof. Do not discard the branch merely because GitHub shows the PR merged.
+- Do not open a PR unless a new Floatplane observation appears.
+
+## Push / race policy
+
+- Fast-forward push only for observation commits. **Never force-push** them.
+- If push is rejected: fetch monitoring again; if remote already has this observationId → noop; if remote tip is a different observation → discard local mutation and reevaluate from remote tip; else abort.
+- Never overwrite another run’s observation, create a competing history, open a duplicate PR, or rewrite B→C as B→D while dropping C.
 
 ## Main advances while PR open
 

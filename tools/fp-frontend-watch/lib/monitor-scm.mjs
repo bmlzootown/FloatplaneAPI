@@ -1,8 +1,8 @@
 /**
  * SCM refresh / pending-ledger helpers for Phase 1.2 monitoring.
  *
- * Explicitly refreshes remotes every run. Decisions about conflicts and
- * pending commits stay in pure functions; this module only shells git.
+ * Explicitly refreshes remotes every run. Pending uniqueness is decided from
+ * observation state + monitoring-path diffs (not ancestry alone).
  */
 
 import { spawnSync } from 'node:child_process';
@@ -62,7 +62,6 @@ export function refreshMonitoringRefs(repoRoot) {
     };
   }
 
-  // Monitoring branch may not exist yet — that is ok.
   const monFetch = git(repoRoot, ['fetch', 'origin', MONITOR_BRANCH]);
   let monitorBranchExists = false;
   let monitorTipSha = null;
@@ -73,7 +72,6 @@ export function refreshMonitoringRefs(repoRoot) {
       monitorTipSha = monSha.stdout;
     }
   } else {
-    // Confirm absence via ls-remote; network errors on ls-remote are failures.
     const ls = git(repoRoot, ['ls-remote', '--heads', 'origin', MONITOR_BRANCH]);
     if (!ls.ok) {
       return {
@@ -85,7 +83,6 @@ export function refreshMonitoringRefs(repoRoot) {
       };
     }
     if (ls.stdout) {
-      // Fetch failed but branch exists — treat as refresh failure.
       return {
         ok: false,
         error: `git fetch origin ${MONITOR_BRANCH} failed but branch exists: ${monFetch.stderr || monFetch.stdout}`,
@@ -106,7 +103,7 @@ export function refreshMonitoringRefs(repoRoot) {
 }
 
 /**
- * Commits on monitor tip that are not reachable from origin/main.
+ * Commits on monitor tip that are not reachable from origin/main (ancestry hint only).
  * @param {string} repoRoot
  */
 export function listPendingCommitShas(repoRoot) {
@@ -129,6 +126,31 @@ function remoteRefExists(repoRoot, ref) {
 }
 
 /**
+ * Diff monitoring paths (state/ + artifacts/frontend/) between main and monitor tips.
+ * @param {string} repoRoot
+ * @returns {{ ok: boolean, paths: string[], error?: string }}
+ */
+export function diffMonitoringPaths(repoRoot) {
+  if (!remoteRefExists(repoRoot, `origin/${MONITOR_BRANCH}`)) {
+    return { ok: true, paths: [] };
+  }
+  const r = git(repoRoot, [
+    'diff',
+    '--name-only',
+    `origin/${DEFAULT_BRANCH}`,
+    `origin/${MONITOR_BRANCH}`,
+    '--',
+    'state',
+    'artifacts/frontend',
+  ]);
+  if (!r.ok) {
+    return { ok: false, paths: [], error: r.stderr || r.stdout };
+  }
+  const paths = r.stdout ? r.stdout.split(/\n+/).filter(Boolean) : [];
+  return { ok: true, paths };
+}
+
+/**
  * Read state/last-known-frontend.json from a git treeish.
  * @param {string} repoRoot
  * @param {string} treeish
@@ -144,50 +166,107 @@ export async function readStateFromTreeish(repoRoot, treeish) {
 }
 
 /**
- * Walk pending commits newest-first and collect observation states that differ.
- * Simplest robust approach: read tip state + for each pending commit that
- * touches state/, record observation if observationId changed.
+ * Collect unique pending observations using observation state as primary authority.
+ * Ancestry is only used to list intermediates when the tip truly differs from main.
  *
  * @param {string} repoRoot
- * @returns {Promise<{ ok: boolean, error?: string, pending: object[] }>}
  */
 export async function collectPendingObservations(repoRoot) {
+  const mainState = await readStateFromTreeish(repoRoot, `origin/${DEFAULT_BRANCH}`);
+  const mainObservationId = mainState?.observationId ?? null;
+
+  if (!remoteRefExists(repoRoot, `origin/${MONITOR_BRANCH}`)) {
+    return {
+      ok: true,
+      pending: [],
+      assessmentInputs: {
+        mainObservationId,
+        monitorTipObservationId: null,
+        monitoringPathDiffs: [],
+        commitsAheadOfMain: 0,
+      },
+    };
+  }
+
+  const monitorState = await readStateFromTreeish(
+    repoRoot,
+    `origin/${MONITOR_BRANCH}`,
+  );
+  const monitorTipObservationId = monitorState?.observationId ?? null;
+
+  const pathDiff = diffMonitoringPaths(repoRoot);
+  if (!pathDiff.ok) {
+    return { ok: false, error: pathDiff.error, pending: [], assessmentInputs: null };
+  }
+
   const listed = listPendingCommitShas(repoRoot);
   if (!listed.ok) {
-    return { ok: false, error: listed.error, pending: [] };
-  }
-  if (!listed.shas.length) {
-    return { ok: true, pending: [] };
+    return { ok: false, error: listed.error, pending: [], assessmentInputs: null };
   }
 
-  // rev-list returns newest first; build chronological oldest→newest.
-  const chronological = [...listed.shas].reverse();
+  const assessmentInputs = {
+    mainObservationId,
+    monitorTipObservationId,
+    monitoringPathDiffs: pathDiff.paths,
+    commitsAheadOfMain: listed.shas.length,
+  };
+
+  // Same tip observation + no monitoring path diffs ⇒ fully landed (squash/rebase safe).
+  if (
+    mainObservationId &&
+    monitorTipObservationId &&
+    mainObservationId === monitorTipObservationId &&
+    pathDiff.paths.length === 0
+  ) {
+    return { ok: true, pending: [], assessmentInputs };
+  }
+
   /** @type {object[]} */
   const pending = [];
-  let lastId = null;
+  let lastId = mainObservationId;
 
-  // Baseline on main tip for previousObservationId context
-  const mainState = await readStateFromTreeish(repoRoot, `origin/${DEFAULT_BRANCH}`);
-  lastId = mainState?.observationId ?? null;
-
-  for (const sha of chronological) {
-    const st = await readStateFromTreeish(repoRoot, sha);
-    if (!st?.observationId) continue;
-    if (st.observationId === lastId) continue;
-    pending.push({
-      observationId: st.observationId,
-      previousObservationId: st.previousObservationId ?? null,
-      buildId: st.buildId,
-      observedAt: st.observedAt,
-      artifactDir: st.artifactDir,
-      artifacts: st.artifacts,
-      layout: st.layout,
-      commitSha: sha,
-    });
-    lastId = st.observationId;
+  if (listed.shas.length) {
+    const chronological = [...listed.shas].reverse();
+    for (const sha of chronological) {
+      const st = await readStateFromTreeish(repoRoot, sha);
+      if (!st?.observationId) continue;
+      if (st.observationId === lastId) continue;
+      if (st.observationId === mainObservationId) {
+        lastId = st.observationId;
+        continue;
+      }
+      pending.push({
+        observationId: st.observationId,
+        previousObservationId: st.previousObservationId ?? null,
+        buildId: st.buildId,
+        observedAt: st.observedAt,
+        artifactDir: st.artifactDir,
+        artifacts: st.artifacts,
+        layout: st.layout,
+        commitSha: sha,
+      });
+      lastId = st.observationId;
+    }
   }
 
-  return { ok: true, pending };
+  if (
+    monitorTipObservationId &&
+    monitorTipObservationId !== mainObservationId &&
+    !pending.some((p) => p.observationId === monitorTipObservationId)
+  ) {
+    pending.push({
+      observationId: monitorTipObservationId,
+      previousObservationId: monitorState?.previousObservationId ?? null,
+      buildId: monitorState?.buildId,
+      observedAt: monitorState?.observedAt,
+      artifactDir: monitorState?.artifactDir,
+      artifacts: monitorState?.artifacts,
+      layout: monitorState?.layout,
+      commitSha: null,
+    });
+  }
+
+  return { ok: true, pending, assessmentInputs };
 }
 
 /**
@@ -203,7 +282,6 @@ export function mergeOriginMain(repoRoot) {
   const conflictPaths = unmerged.ok && unmerged.stdout
     ? unmerged.stdout.split(/\n+/).filter(Boolean)
     : [];
-  // Abort merge to leave a clean failure state for the operator/agent.
   git(repoRoot, ['merge', '--abort']);
   return {
     ok: false,
@@ -224,7 +302,6 @@ export function checkoutBranch(repoRoot, branch, opts = {}) {
     const r = git(repoRoot, ['checkout', '-B', branch, opts.createFrom]);
     return { ok: r.ok, error: r.ok ? null : r.stderr || r.stdout };
   }
-  // Prefer existing local, else track origin
   if (git(repoRoot, ['rev-parse', '--verify', branch]).ok) {
     const r = git(repoRoot, ['checkout', branch]);
     return { ok: r.ok, error: r.ok ? null : r.stderr || r.stdout };
@@ -234,6 +311,30 @@ export function checkoutBranch(repoRoot, branch, opts = {}) {
     return { ok: r.ok, error: r.ok ? null : r.stderr || r.stdout };
   }
   return { ok: false, error: `Branch ${branch} not found locally or on origin` };
+}
+
+/**
+ * Fast-forward-only push of the monitoring branch. Never force-pushes observation commits.
+ * @param {string} repoRoot
+ * @returns {{ ok: boolean, rejected: boolean, error: string|null }}
+ */
+export function pushMonitorBranchFfOnly(repoRoot) {
+  const push = git(repoRoot, ['push', 'origin', `HEAD:${MONITOR_BRANCH}`]);
+  if (push.ok) {
+    return { ok: true, rejected: false, error: null };
+  }
+  const err = push.stderr || push.stdout || 'push failed';
+  const rejected = /\[rejected\]|non-fast-forward|fetch first|failed to push/i.test(err);
+  return { ok: false, rejected, error: err };
+}
+
+/**
+ * Reset local monitoring branch tip to origin/main after state proof of no unique pending.
+ * Uses force update of local ref only; remote update should use --force-with-lease when pushing.
+ * @param {string} repoRoot
+ */
+export function resetLocalMonitorFromMain(repoRoot) {
+  return git(repoRoot, ['branch', '-f', MONITOR_BRANCH, `origin/${DEFAULT_BRANCH}`]);
 }
 
 /**

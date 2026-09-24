@@ -26,8 +26,10 @@ import {
   PR_TITLE_PREFIX,
 } from './lib/monitor-constants.mjs';
 import {
+  assessPendingLedger,
   decideAfterMainSync,
   decideMonitorAction,
+  decidePushRace,
   decideWorkspacePrep,
   normalizeOpenMonitorPrs,
   selectMonitorPr,
@@ -36,11 +38,11 @@ import { formatObservationPrBody } from './lib/monitor-pr-body.mjs';
 import {
   checkoutBranch,
   collectPendingObservations,
-  git,
   mergeOriginMain,
   readStateFromTreeish,
   readWorkingState,
   refreshMonitoringRefs,
+  resetLocalMonitorFromMain,
 } from './lib/monitor-scm.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -107,12 +109,22 @@ async function main(argv) {
     ? await readStateFromTreeish(REPO_ROOT, `origin/${MONITOR_BRANCH}`)
     : null;
 
+  const assessment = assessPendingLedger({
+    ...(pendingCollected.assessmentInputs || {
+      mainObservationId: mainState?.observationId ?? null,
+      monitorTipObservationId: monitorState?.observationId ?? null,
+      monitoringPathDiffs: [],
+      commitsAheadOfMain: 0,
+    }),
+    openMonitorPr,
+  });
+
   const prep = decideWorkspacePrep({
     fetchOk: true,
     monitorBranchExists: refreshed.monitorBranchExists,
-    monitorHasPendingCommits: pendingCollected.pending.length > 0,
-    mainObservationId: mainState?.observationId ?? null,
-    monitorTipObservationId: monitorState?.observationId ?? null,
+    pendingAssessment: assessment,
+    mainObservationId: assessment.mainObservationId,
+    monitorTipObservationId: assessment.monitorTipObservationId,
     pendingObservations: pendingCollected.pending,
     openMonitorPr,
   });
@@ -176,9 +188,11 @@ async function main(argv) {
         process.exit(EXIT.FAILURE);
       }
     }
-    if (prep.resetMonitorFromMain) {
-      // Safe only when decideWorkspacePrep said there are no pending commits.
-      gitResetMonitorFromMain(REPO_ROOT);
+    if (prep.resetMonitorFromMain && prep.allowForceWithLeaseReset) {
+      // Local tip only after state proof of no unique pending. Remote non-FF
+      // update (if needed) must use --force-with-lease and never runs for
+      // ordinary observation commits.
+      resetLocalMonitorFromMain(REPO_ROOT);
     }
   }
 
@@ -233,10 +247,29 @@ async function main(argv) {
 
 function buildDecisionFromInjected(args) {
   if (args.phase === 'prep') {
-    return decideWorkspacePrep(args.prepJson || args.checkJson || {});
+    const fixture = args.prepJson || args.checkJson || {};
+    if (fixture.assessment || fixture.pendingAssessment) {
+      return decideWorkspacePrep({
+        fetchOk: fixture.fetchOk !== false,
+        fetchError: fixture.fetchError,
+        monitorBranchExists: fixture.monitorBranchExists,
+        pendingAssessment: fixture.assessment || fixture.pendingAssessment,
+        mainObservationId: fixture.mainObservationId,
+        monitorTipObservationId: fixture.monitorTipObservationId,
+        pendingObservations: fixture.pendingObservations || [],
+        openMonitorPr: fixture.openMonitorPr || null,
+      });
+    }
+    return decideWorkspacePrep(fixture);
   }
   if (args.phase === 'sync') {
     return decideAfterMainSync(args.syncJson || args.checkJson || {});
+  }
+  if (args.phase === 'race' || args.phase === 'push-race') {
+    return decidePushRace(args.raceJson || args.checkJson || {});
+  }
+  if (args.phase === 'assess') {
+    return assessPendingLedger(args.assessJson || args.checkJson || {});
   }
 
   const openMonitorPrs = normalizeOpenMonitorPrs(args.openPrsJson || []);
@@ -283,11 +316,6 @@ function attachPrArtifacts(decision, { testStatus, mainObservationId }) {
       decision.checkSummary?.artifactDir,
     ].filter(Boolean),
   };
-}
-
-/** Local tip only — does not force-push; agent/ops may push when appropriate. */
-function gitResetMonitorFromMain(repoRoot) {
-  git(repoRoot, ['branch', '-f', MONITOR_BRANCH, `origin/${DEFAULT_BRANCH}`]);
 }
 
 function emit(decision, args) {
@@ -416,13 +444,13 @@ Options:
   --run-tests            Run frontend-watch unit tests before watcher
   --dry-run              Pass --dry-run to the watcher
   --decision-only        Skip live SCM/watcher; inject fixtures
-  --phase prep|sync|watch  With --decision-only (default watch)
+  --phase prep|sync|watch|assess|race  With --decision-only (default watch)
   --exit-code <n>        For watch phase
-  --check-json <json>    Watcher payload or prep/sync fixture
+  --check-json <json>    Watcher payload or prep/sync/race/assess fixture
   --baseline-observation-id <id>
   --pending-json <json>  Already-pending observations (array)
   --open-prs-json <json>
-  --prep-json / --sync-json
+  --prep-json / --sync-json / --race-json / --assess-json
   --fail-on-failure      With --decision-only, exit 1 when exit-code is 1
   -h, --help
 `);
@@ -445,6 +473,8 @@ function parseArgs(argv) {
     pendingJson: null,
     prepJson: null,
     syncJson: null,
+    raceJson: null,
+    assessJson: null,
     baselineObservationId: null,
     mainObservationId: null,
     workspaceFromMonitor: false,
@@ -467,6 +497,8 @@ function parseArgs(argv) {
     else if (a === '--pending-json') out.pendingJson = JSON.parse(argv[++i]);
     else if (a === '--prep-json') out.prepJson = JSON.parse(argv[++i]);
     else if (a === '--sync-json') out.syncJson = JSON.parse(argv[++i]);
+    else if (a === '--race-json') out.raceJson = JSON.parse(argv[++i]);
+    else if (a === '--assess-json') out.assessJson = JSON.parse(argv[++i]);
     else if (a === '--baseline-observation-id') out.baselineObservationId = argv[++i];
     else if (a === '--main-observation-id') out.mainObservationId = argv[++i];
     else {
