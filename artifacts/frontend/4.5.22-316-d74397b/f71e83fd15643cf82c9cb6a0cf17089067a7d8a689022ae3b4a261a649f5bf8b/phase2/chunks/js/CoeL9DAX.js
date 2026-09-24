@@ -1,0 +1,1 @@
+import{j as r}from"./index-BZVDPgzb.js";import"./Buh3XU73.js";import{c as s}from"./DViYqrpa.js";import"./D9qr7xvm.js";import"./CLa3DqVm.js";const c=s(()=>r.jsxs("div",{children:[r.jsx("h1",{children:"Subscription Plans (BETA)"}),r.jsx("p",{children:"This page is under construction. Please check back later."})]}));export{c as default};

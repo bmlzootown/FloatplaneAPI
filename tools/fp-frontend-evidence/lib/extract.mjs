@@ -418,13 +418,19 @@ function extractUrlTemplates(text, sourcePath, sourceSha256, role, items, struct
   let m;
   while ((m = tmplRe.exec(text)) !== null) {
     const raw = m[1];
-    if (looksLikeRejectedVendorUrl(raw)) {
+    // Only reject when an explicit vendor host URL appears; record that URL, not the whole template.
+    const vendorUrl = raw.match(/https?:\/\/[a-z0-9.-]*(?:keyos\.com)[^\s`'"]*/i);
+    if (vendorUrl) {
       rejectedSignals.push({
-        raw: raw.slice(0, 200),
+        raw: vendorUrl[0].slice(0, 200),
         reason: 'non_floatplane_host',
         sourcePath,
         byteOffset: m.index,
       });
+      continue;
+    }
+    // Skip oversized templates that are clearly not URL builders (EME/codec blobs, etc.)
+    if (raw.length > 300 && !/^[\s/]*\/api\//.test(raw) && !/\$\{/.test(raw.slice(0, 80))) {
       continue;
     }
     const pathPart = extractPathFromTemplate(raw);
@@ -590,7 +596,8 @@ function isRejectedApiHost(host) {
 
 /** @param {string} raw */
 function looksLikeRejectedVendorUrl(raw) {
-  return /keyos\.com|fairplay\.|twitch\.tv/i.test(raw);
+  // Require an explicit vendor API host — avoid bare "fairplay." / codec substrings.
+  return /https?:\/\/[a-z0-9.-]*(?:keyos\.com|twitch\.tv)\b/i.test(raw);
 }
 
 /** @param {string} raw */

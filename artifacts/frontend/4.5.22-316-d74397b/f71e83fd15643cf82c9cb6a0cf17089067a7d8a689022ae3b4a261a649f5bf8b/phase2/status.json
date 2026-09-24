@@ -1,0 +1,26 @@
+{
+  "status": "complete",
+  "observationId": "f71e83fd15643cf82c9cb6a0cf17089067a7d8a689022ae3b4a261a649f5bf8b",
+  "buildId": "4.5.22-316-d74397b",
+  "extractorId": "phase2.1-frontend-evidence",
+  "extractorVersion": "2.1.0",
+  "evidenceSchemaVersion": 1,
+  "chunkGraphSchemaVersion": 1,
+  "entrySha256": "290c79097b9ba71dd577bfcd8a0709cf329309eef58afb79f8661b65a67d928b",
+  "extractedAt": "2026-09-24T17:18:33.525Z",
+  "updatedAt": "2026-09-24T17:18:33.525Z",
+  "metrics": {
+    "reachableJsCount": 249,
+    "lazyJsCount": 248,
+    "archivedChunkBytes": 3570490,
+    "entryBytes": 1809433,
+    "mapDepsFirstWaveJs": 14,
+    "structuredOperationCount": 350,
+    "structuredByMethod": {
+      "GET": 156,
+      "POST": 194
+    },
+    "rejectedSignalCount": 7,
+    "collectionStatus": "complete"
+  }
+}

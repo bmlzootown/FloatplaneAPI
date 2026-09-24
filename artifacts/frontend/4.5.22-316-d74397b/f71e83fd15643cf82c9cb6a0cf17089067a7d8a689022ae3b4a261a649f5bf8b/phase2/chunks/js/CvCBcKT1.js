@@ -1,0 +1,1 @@
+import{v as e}from"./index-BZVDPgzb.js";function v({controlled:t,default:s,name:c,state:f="value"}){const{current:a}=e.useRef(t!==void 0),[o,u]=e.useState(s),l=a?t:o,n=e.useCallback(r=>{a||u(r)},[]);return[l,n]}export{v as u};

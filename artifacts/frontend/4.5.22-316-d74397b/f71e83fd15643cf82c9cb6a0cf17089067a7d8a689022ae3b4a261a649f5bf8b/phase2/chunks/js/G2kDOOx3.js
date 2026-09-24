@@ -1,0 +1,1 @@
+import{j as r}from"./index-BZVDPgzb.js";import"./Buh3XU73.js";import{c as e}from"./DViYqrpa.js";import"./D9qr7xvm.js";import"./CLa3DqVm.js";const c=e(()=>r.jsxs("div",{children:[r.jsx("h1",{children:"Offboarding Page"}),r.jsx("p",{children:"This page is under construction. Please check back later."})]}));export{c as default};

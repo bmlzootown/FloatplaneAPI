@@ -1,0 +1,1 @@
+import{j as f}from"./index-BZVDPgzb.js";function h(i){const e={};return i.width!==void 0&&(e.width=i.width),i.height!==void 0&&(e.height=i.height),i.flex!==void 0&&(e.flex=i.flex),i.basis!==void 0&&(e.flexBasis=i.basis),i.grow!==void 0&&(e.flexGrow=i.grow),i.shrink!==void 0&&(e.flexShrink=i.shrink),f.jsx("div",{style:e})}export{h as S};

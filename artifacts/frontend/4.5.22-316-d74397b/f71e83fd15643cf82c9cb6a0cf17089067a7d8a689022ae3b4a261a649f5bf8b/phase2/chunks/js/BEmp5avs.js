@@ -1,0 +1,1 @@
+import{j as e,A as n}from"./index-BZVDPgzb.js";import{b as s}from"./Buh3XU73.js";function i(r){return r=(r||null)?.trim(),t=>e.jsxs(e.Fragment,{children:[r&&e.jsx(s,{defer:!1,title:`${r} - ${n.title}`}),t]})}export{i as r};
