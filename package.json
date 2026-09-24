@@ -20,7 +20,9 @@
     "frontend-check": "node tools/fp-frontend-watch/cli.mjs check",
     "frontend-check-json": "node tools/fp-frontend-watch/cli.mjs check --json",
     "frontend-monitor": "node tools/fp-frontend-watch/monitor-orchestrate.mjs",
-    "frontend-monitor-json": "node tools/fp-frontend-watch/monitor-orchestrate.mjs --json"
+    "frontend-monitor-json": "node tools/fp-frontend-watch/monitor-orchestrate.mjs --json",
+    "frontend-evidence-test": "node --test tests/frontend-evidence/frontend-evidence.test.mjs",
+    "frontend-evidence": "node tools/fp-frontend-evidence/cli.mjs extract"
   },
   "repository": {
     "type": "git",

@@ -1,0 +1,186 @@
+{
+  "status": "complete_with_external_rejects",
+  "refuseRemoval": false,
+  "observationId": "f71e83fd15643cf82c9cb6a0cf17089067a7d8a689022ae3b4a261a649f5bf8b",
+  "buildId": "4.5.22-316-d74397b",
+  "extractorId": "phase2.1-frontend-evidence",
+  "extractorVersion": "2.1.1",
+  "evidenceSchemaVersion": 2,
+  "chunkGraphSchemaVersion": 2,
+  "entrySha256": "290c79097b9ba71dd577bfcd8a0709cf329309eef58afb79f8661b65a67d928b",
+  "extractedAt": "2026-09-24T17:45:37.450Z",
+  "updatedAt": "2026-09-24T17:45:37.450Z",
+  "metrics": {
+    "reachableJsCount": 249,
+    "lazyJsCount": 248,
+    "archivedChunkBytes": 3570490,
+    "entryBytes": 1809433,
+    "mapDepsFirstWaveJs": 14,
+    "structuredOperationCount": 350,
+    "structuredByMethod": {
+      "GET": 156,
+      "POST": 194
+    },
+    "rejectedSignalCount": 7,
+    "collectionStatus": "complete_with_external_rejects",
+    "refuseRemoval": false,
+    "reachedDeterministicClosure": true,
+    "depsDiscovered": 2942,
+    "successfullyFetched": 249,
+    "duplicateRefs": 2592,
+    "rejectedExternalCount": 7,
+    "routeRoots": [
+      {
+        "path": "js/G4q5a1Mx.js",
+        "label": "tv",
+        "ok": true
+      },
+      {
+        "path": "js/CIQTQEz9.js",
+        "label": "web",
+        "ok": true
+      }
+    ]
+  },
+  "closure": {
+    "status": "complete_with_external_rejects",
+    "refuseRemoval": false,
+    "reachedDeterministicClosure": true,
+    "depsDiscovered": 2942,
+    "uniqueSameBuildJs": 249,
+    "successfullyFetched": 249,
+    "duplicateRefs": 2592,
+    "rejectedExternalCount": 7,
+    "rejectedExternal": [
+      {
+        "kind": "evidence_url",
+        "relativePath": null,
+        "url": "https://fairplay.twitch.keyos.com",
+        "reason": "external_vendor_url",
+        "classification": "out_of_build_root",
+        "whyNotFollowed": "cross_origin_vendor_host",
+        "host": "fairplay.twitch.keyos.com",
+        "sourcePath": "js/CIWlSVcH.js",
+        "byteOffset": 193816,
+        "fetched": false,
+        "parserFailure": false
+      },
+      {
+        "kind": "evidence_url",
+        "relativePath": null,
+        "url": "https://playready.twitch.keyos.com",
+        "reason": "external_vendor_url",
+        "classification": "out_of_build_root",
+        "whyNotFollowed": "cross_origin_vendor_host",
+        "host": "playready.twitch.keyos.com",
+        "sourcePath": "js/CIWlSVcH.js",
+        "byteOffset": 194077,
+        "fetched": false,
+        "parserFailure": false
+      },
+      {
+        "kind": "evidence_url",
+        "relativePath": null,
+        "url": "https://widevine.twitch.keyos.com",
+        "reason": "external_vendor_url",
+        "classification": "out_of_build_root",
+        "whyNotFollowed": "cross_origin_vendor_host",
+        "host": "widevine.twitch.keyos.com",
+        "sourcePath": "js/CIWlSVcH.js",
+        "byteOffset": 194223,
+        "fetched": false,
+        "parserFailure": false
+      },
+      {
+        "kind": "evidence_url",
+        "relativePath": null,
+        "url": "https://fairplay.twitch.keyos.com/api/v4/getCertificate?certHash=a17fd33d3843df9b17679ccf50a419b2",
+        "reason": "external_vendor_url",
+        "classification": "out_of_build_root",
+        "whyNotFollowed": "cross_origin_vendor_host",
+        "host": "fairplay.twitch.keyos.com",
+        "sourcePath": "js/CIWlSVcH.js",
+        "byteOffset": 193815,
+        "fetched": false,
+        "parserFailure": false
+      },
+      {
+        "kind": "evidence_url",
+        "relativePath": null,
+        "url": "https://fairplay.twitch.keyos.com/api/v4/getLicense",
+        "reason": "external_vendor_url",
+        "classification": "out_of_build_root",
+        "whyNotFollowed": "cross_origin_vendor_host",
+        "host": "fairplay.twitch.keyos.com",
+        "sourcePath": "js/CIWlSVcH.js",
+        "byteOffset": 193926,
+        "fetched": false,
+        "parserFailure": false
+      },
+      {
+        "kind": "evidence_url",
+        "relativePath": null,
+        "url": "https://playready.twitch.keyos.com/api/v4/getLicense",
+        "reason": "external_vendor_url",
+        "classification": "out_of_build_root",
+        "whyNotFollowed": "cross_origin_vendor_host",
+        "host": "playready.twitch.keyos.com",
+        "sourcePath": "js/CIWlSVcH.js",
+        "byteOffset": 194076,
+        "fetched": false,
+        "parserFailure": false
+      },
+      {
+        "kind": "evidence_url",
+        "relativePath": null,
+        "url": "https://widevine.twitch.keyos.com/api/v4/getLicense",
+        "reason": "external_vendor_url",
+        "classification": "out_of_build_root",
+        "whyNotFollowed": "cross_origin_vendor_host",
+        "host": "widevine.twitch.keyos.com",
+        "sourcePath": "js/CIWlSVcH.js",
+        "byteOffset": 194222,
+        "fetched": false,
+        "parserFailure": false
+      }
+    ],
+    "invalidNonJsCount": 0,
+    "invalidNonJs": [],
+    "failedSameBuildRetrievals": 0,
+    "failedSameBuildPaths": [],
+    "parseFailures": 0,
+    "evidenceWarnings": 2,
+    "phase22Note": "When status is incomplete (refuseRemoval=true), Phase 2.2 must NOT treat missing ops as API removal."
+  },
+  "frontendRoots": {
+    "entryPath": "js/index-BZVDPgzb.js",
+    "baseUrl": "https://frontend.floatplane.com/user/4.5.22-316-d74397b/",
+    "sameObservation": true,
+    "note": "Route roots are literal dynamic import() targets in the Phase 1 entry JS. Both TV and web shells share the same build baseUrl and observationId; relative paths are keyed only under that single build root (never merged across deployments). For the Floatplane Vite shell, the ternary then-branch is TV and the else-branch is web.",
+    "routeRoots": [
+      {
+        "path": "js/G4q5a1Mx.js",
+        "specifier": "./G4q5a1Mx.js",
+        "branchHint": "then",
+        "label": "tv",
+        "byteOffset": 1792703,
+        "fetchStatus": "fetched",
+        "sha256": "0db2db1aaf4352e4dfd494cf5dcb093a03c69b0109edf7ca4a54a32c782857e9",
+        "bytes": 19360,
+        "ok": true
+      },
+      {
+        "path": "js/CIQTQEz9.js",
+        "specifier": "./CIQTQEz9.js",
+        "branchHint": "else",
+        "label": "web",
+        "byteOffset": 1792744,
+        "fetchStatus": "fetched",
+        "sha256": "366cbf9069a32b4684d044c06d26852f5c809e6005a7d05864de67aaf2cc2742",
+        "bytes": 26163,
+        "ok": true
+      }
+    ],
+    "allRootsOk": true
+  }
+}

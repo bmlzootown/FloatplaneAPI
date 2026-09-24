@@ -12,3 +12,4 @@
 /artifacts/frontend/.staging/
 /artifacts/frontend/**/_discovery/
 /tests/frontend-watch/.tmp-watch/
+/tests/frontend-evidence/.tmp-evidence/

@@ -1,0 +1,1 @@
+const s={homeFeed:"/tv",subscriptionsFeed:"/tv/subscriptions",historyFeed:"/tv/history",settings:"/tv/settings",createPost(t,e){return e?`/tv/post/${t}/text`:`/tv/post/${t}`},createChannelPosts(t,e=null){return e?`/tv/creator/${t}/posts/${e}`:`/tv/creator/${t}/posts`},createChannelAbout(t,e=null){return e?`/tv/creator/${t}/about/${e}`:`/tv/creator/${t}/about`}};export{s as T};

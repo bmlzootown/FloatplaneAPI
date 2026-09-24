@@ -119,8 +119,20 @@ artifacts/frontend/{buildId}/{observationId}/
   <entry>.js
   manifest.floatplane.webmanifest
   _discovery/homepage.html    # gitignored evidence
+  phase2/                     # Phase 2.1 evidence (optional; see below)
 ```
 
+**Phase 2.1 — frontend evidence (explicit, not on the 6h schedule):** BFS reachable Vite chunks from an archived observation, archive lazy JS bytes, extract structured `{path,method}` API evidence + supporting signals. Does not edit OpenAPI, classify inter-observation changes, or write Phase 1 LKG.
+
+```sh
+make frontend-evidence-test
+make frontend-evidence
+# or: make frontend-evidence OBSERVATION=<observationId>
+```
+
+Outputs land under `artifacts/frontend/{buildId}/{observationId}/phase2/` (`chunk-graph.json`, `api-evidence.json`, inventory markdown). See `tools/fp-frontend-evidence/README.md`.
+
+**Historical Angular helper scripts** (`tools/fp-frontend-fetch*.sh`, …):
 `observationId` = SHA-256 over sorted compared artifact `path`+`sha256` lines. Same-build content change A→B creates a new directory; a second B is unchanged. Both A and B remain recoverable. HTTP fetches use default timeouts (15s homepage / 60s artifacts) with one conservative retry on transient failures.
 
 **Same-version-changed:** build id and bundle hashes are independent. Homepage HTML is archived under `_discovery/` but is **not** part of compared identity.

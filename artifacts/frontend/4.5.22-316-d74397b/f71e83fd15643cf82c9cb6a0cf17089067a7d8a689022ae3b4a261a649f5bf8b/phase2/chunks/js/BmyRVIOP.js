@@ -1,0 +1,1 @@
+import{R as e}from"./index-BZVDPgzb.js";import{b as s}from"./G4q5a1Mx.js";const o=Object.freeze({setFocus(){},moveFocus(){},handleEnterPress(){},handleBackPress(){},focusParentGroup(){}}),a=()=>e.useContext(s)?.focusManager||o;export{a as u};

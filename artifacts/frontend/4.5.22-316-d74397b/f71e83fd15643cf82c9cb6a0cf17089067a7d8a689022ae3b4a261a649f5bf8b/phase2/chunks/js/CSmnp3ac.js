@@ -1,0 +1,1 @@
+import{j as e}from"./index-BZVDPgzb.js";import"./Buh3XU73.js";import{c as r}from"./DViYqrpa.js";import"./D9qr7xvm.js";import"./CLa3DqVm.js";const o=r(()=>e.jsxs("div",{children:[e.jsx("h1",{children:"Agreement Management (BETA)"}),e.jsx("p",{children:"This page is under construction. Please check back later."})]}));export{o as default};
