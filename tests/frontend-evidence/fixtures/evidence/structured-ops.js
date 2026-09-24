@@ -1,0 +1,4 @@
+/* Structured OpenAPI-generator style ops */
+class DemoApi{async listRaw(i,e){const n={};i.active!=null&&(n.active=i.active);const s={};const c=await this.request({path:"/api/v3/user/subscriptions",method:"GET",headers:s,query:n},e);return new t.JSONApiResponse(c,d=>d.map(r.UserSubscriptionInfoFromJSON))}
+async createRaw(i,e){const n={},s={};s["Content-Type"]="application/json";const c=await this.request({path:"/api/v3/user/subscriptions",method:"POST",headers:s,query:n,body:(0,r.CreateSubToJSON)(i.body)},e);return new t.JSONApiResponse(c,(0,r.UserSubscriptionInfoFromJSON))}
+async awardRaw(i,e){const n={},s={};s["Content-Type"]="application/json";const c=await this.request({path:"/api/acp/v3/achievement/award",method:"POST",headers:s,query:n,body:(0,r.AwardAchievementsRequestToJSON)(i.awardAchievementsRequest)},e);return new t.VoidApiResponse(c)}}

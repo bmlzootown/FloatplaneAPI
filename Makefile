@@ -10,6 +10,7 @@ help:
 	@echo "docs-trimmed docs-full docs-async"
 	@echo "frontend-watch-test frontend-discover frontend-check frontend-check-json"
 	@echo "frontend-monitor frontend-monitor-json"
+	@echo "frontend-evidence-test frontend-evidence"
 
 # Section: Helpers and structural
 
@@ -52,6 +53,15 @@ frontend-monitor:
 
 frontend-monitor-json:
 	node tools/fp-frontend-watch/monitor-orchestrate.mjs --json
+
+# Phase 2.1: reachable chunk graph + API evidence for one observation (does not touch Phase 1 LKG)
+frontend-evidence-test:
+	node --test tests/frontend-evidence/frontend-evidence.test.mjs
+
+# Usage: make frontend-evidence
+#        make frontend-evidence OBSERVATION=<observationId>
+frontend-evidence:
+	node tools/fp-frontend-evidence/cli.mjs extract $(if $(OBSERVATION),--observation $(OBSERVATION),)
 
 # Section: Trimmed docs
 
