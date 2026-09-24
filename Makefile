@@ -11,6 +11,7 @@ help:
 	@echo "frontend-watch-test frontend-discover frontend-check frontend-check-json"
 	@echo "frontend-monitor frontend-monitor-json"
 	@echo "frontend-evidence-test frontend-evidence"
+	@echo "frontend-evidence-diff-test frontend-evidence-diff frontend-evidence-diff-latest"
 
 # Section: Helpers and structural
 
@@ -62,6 +63,20 @@ frontend-evidence-test:
 #        make frontend-evidence OBSERVATION=<observationId>
 frontend-evidence:
 	node tools/fp-frontend-evidence/cli.mjs extract $(if $(OBSERVATION),--observation $(OBSERVATION),)
+
+# Phase 2.2: semantic evidence diff between two archived inventories (offline; no Phase 1 writes)
+frontend-evidence-diff-test:
+	node --test tests/frontend-evidence-diff/frontend-evidence-diff.test.mjs
+
+# Usage: make frontend-evidence-diff FROM=<observationId> TO=<observationId>
+frontend-evidence-diff:
+	@test -n "$(FROM)" || (echo 'FROM=<observationId> required' >&2; exit 1)
+	@test -n "$(TO)" || (echo 'TO=<observationId> required' >&2; exit 1)
+	node tools/fp-frontend-evidence/cli.mjs diff --from $(FROM) --to $(TO)
+
+# Convenience: two most recent complete inventories (fails clearly if fewer than two)
+frontend-evidence-diff-latest:
+	node tools/fp-frontend-evidence/cli.mjs diff-latest
 
 # Section: Trimmed docs
 

@@ -13,3 +13,4 @@
 /artifacts/frontend/**/_discovery/
 /tests/frontend-watch/.tmp-watch/
 /tests/frontend-evidence/.tmp-evidence/
+/tests/frontend-evidence-diff/.tmp-diff/

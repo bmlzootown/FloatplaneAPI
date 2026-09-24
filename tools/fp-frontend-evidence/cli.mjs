@@ -1,22 +1,30 @@
 #!/usr/bin/env node
 /**
- * Floatplane frontend evidence — Phase 2.1 CLI
+ * Floatplane frontend evidence — Phase 2.1 extract + Phase 2.2 diff CLI
  *
  * Exit codes:
- *   0  success (complete inventory published, or idempotent re-run)
+ *   0  success
  *   1  operational failure
- *   3  incomplete chunk collection (no complete inventory published)
+ *   3  incomplete (extract incomplete, or diff with removal suppression)
  *
  * Usage:
  *   node tools/fp-frontend-evidence/cli.mjs extract [--observation <id>] [--json]
- *   node tools/fp-frontend-evidence/cli.mjs extract --dry-run
- *   make frontend-evidence OBSERVATION=<id>
+ *   node tools/fp-frontend-evidence/cli.mjs diff --from <id> --to <id> [--json]
+ *   node tools/fp-frontend-evidence/cli.mjs diff-latest [--json]
+ *   make frontend-evidence-diff FROM=<id> TO=<id>
+ *   make frontend-evidence-diff-latest
  */
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EXIT, EXTRACTOR_ID, EXTRACTOR_VERSION } from './lib/constants.mjs';
 import { runFrontendEvidence } from './lib/run.mjs';
+import {
+  COMPARATOR_ID,
+  COMPARATOR_VERSION,
+  EXIT as DIFF_EXIT,
+} from './lib/diff/constants.mjs';
+import { runEvidenceDiff, runEvidenceDiffLatest } from './lib/diff/run-diff.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -28,12 +36,26 @@ async function main(argv) {
     process.exit(args.help ? 0 : EXIT.FAILURE);
   }
 
-  if (args.command !== 'extract') {
-    console.error(`Unknown command: ${args.command}`);
-    printHelp();
-    process.exit(EXIT.FAILURE);
+  if (args.command === 'extract') {
+    await runExtract(args);
+    return;
+  }
+  if (args.command === 'diff') {
+    await runDiff(args);
+    return;
+  }
+  if (args.command === 'diff-latest') {
+    await runDiffLatest(args);
+    return;
   }
 
+  console.error(`Unknown command: ${args.command}`);
+  printHelp();
+  process.exit(EXIT.FAILURE);
+}
+
+/** @param {ReturnType<typeof parseArgs>} args */
+async function runExtract(args) {
   const statePath = path.resolve(REPO_ROOT, args.state || 'state/last-known-frontend.json');
   const artifactsRoot = path.resolve(REPO_ROOT, args.artifacts || 'artifacts/frontend');
 
@@ -69,7 +91,7 @@ async function main(argv) {
         ),
       );
     } else {
-      printHuman(result, REPO_ROOT);
+      printExtractHuman(result, REPO_ROOT);
     }
 
     process.exit(result.exitCode ?? (result.ok ? EXIT.SUCCESS : EXIT.FAILURE));
@@ -85,7 +107,139 @@ async function main(argv) {
   }
 }
 
-function printHuman(result, repoRoot) {
+/** @param {ReturnType<typeof parseArgs>} args */
+async function runDiff(args) {
+  if (!args.from || !args.to) {
+    console.error('diff requires --from <observationId> and --to <observationId>');
+    printHelp();
+    process.exit(DIFF_EXIT.FAILURE);
+  }
+
+  const artifactsRoot = path.resolve(REPO_ROOT, args.artifacts || 'artifacts/frontend');
+
+  try {
+    const result = await runEvidenceDiff({
+      repoRoot: REPO_ROOT,
+      artifactsRoot,
+      fromObservationId: args.from,
+      toObservationId: args.to,
+      fromBuildId: args.fromBuild || null,
+      toBuildId: args.toBuild || null,
+      dryRun: Boolean(args.dryRun),
+      force: Boolean(args.force),
+      labelAsReal: args.labelAsReal,
+    });
+
+    emitDiffResult(result, args, REPO_ROOT);
+    process.exit(result.exitCode ?? DIFF_EXIT.SUCCESS);
+  } catch (err) {
+    failDiff(err, args);
+  }
+}
+
+/** @param {ReturnType<typeof parseArgs>} args */
+async function runDiffLatest(args) {
+  const artifactsRoot = path.resolve(REPO_ROOT, args.artifacts || 'artifacts/frontend');
+
+  try {
+    const result = await runEvidenceDiffLatest({
+      repoRoot: REPO_ROOT,
+      artifactsRoot,
+      dryRun: Boolean(args.dryRun),
+      force: Boolean(args.force),
+    });
+
+    emitDiffResult(result, args, REPO_ROOT);
+    process.exit(result.exitCode ?? DIFF_EXIT.SUCCESS);
+  } catch (err) {
+    failDiff(err, args);
+  }
+}
+
+/**
+ * @param {Awaited<ReturnType<typeof runEvidenceDiff>>} result
+ * @param {ReturnType<typeof parseArgs>} args
+ * @param {string} repoRoot
+ */
+function emitDiffResult(result, args, repoRoot) {
+  if (args.json) {
+    console.log(
+      JSON.stringify(
+        {
+          ok: result.ok,
+          idempotent: result.idempotent || false,
+          dryRun: result.dryRun || false,
+          fromObservationId: result.from.observationId,
+          toObservationId: result.to.observationId,
+          fromBuildId: result.from.buildId,
+          toBuildId: result.to.buildId,
+          comparisonStatus: result.diff.comparisonStatus,
+          removalSuppressed: result.diff.removalSuppressed,
+          counts: result.diff.counts,
+          outDir: result.outDir ? path.relative(repoRoot, result.outDir) : null,
+          labelAsReal: result.diff.labelAsReal,
+          comparator: `${COMPARATOR_ID}@${COMPARATOR_VERSION}`,
+          warnings: result.diff.warnings,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  console.log(`Floatplane frontend evidence diff (Phase 2.2)`);
+  console.log(`--------------------------------------------`);
+  console.log(`Comparator:    ${COMPARATOR_ID}@${COMPARATOR_VERSION}`);
+  console.log(`From:          ${result.from.buildId} / ${result.from.observationId}`);
+  console.log(`To:            ${result.to.buildId} / ${result.to.observationId}`);
+  console.log(
+    `Output:        ${result.outDir ? path.relative(repoRoot, result.outDir) : '(dry-run)'}`,
+  );
+  console.log(`Idempotent:    ${result.idempotent ? 'yes' : 'no'}`);
+  console.log(`Status:        ${result.diff.comparisonStatus}`);
+  console.log(`Removals suppressed: ${result.diff.removalSuppressed ? 'yes' : 'no'}`);
+  console.log(`Label as real: ${result.diff.labelAsReal ? 'yes' : 'no (fixture/controlled)'}`);
+  if (result.dryRun) console.log(`Dry run:       yes (nothing written)`);
+  console.log(``);
+  const c = result.diff.counts || {};
+  console.log(`Counts:`);
+  console.log(`  structured_operation_added:        ${c.structured_operation_added || 0}`);
+  console.log(`  structured_operation_disappeared:  ${c.structured_operation_disappeared || 0}`);
+  console.log(`  method_set_changed:                ${c.method_set_changed || 0}`);
+  console.log(`  request_construction_changed:      ${c.request_construction_changed || 0}`);
+  console.log(`  auth_evidence_changed:             ${c.auth_evidence_changed || 0}`);
+  console.log(`  response_mapper_changed:           ${c.response_mapper_changed || 0}`);
+  console.log(`  realtime_evidence_changed:         ${c.realtime_evidence_changed || 0}`);
+  console.log(`  weak_reference_added:              ${c.weak_reference_added || 0}`);
+  console.log(`  weak_reference_disappeared:        ${c.weak_reference_disappeared || 0}`);
+  console.log(`  provenance_moved:                  ${c.provenance_moved || 0}`);
+  console.log(`  total:                             ${c.total || 0}`);
+  console.log(``);
+  if (result.diff.warnings?.length) {
+    console.log(`Warnings:`);
+    for (const w of result.diff.warnings) console.log(`  - ${w}`);
+    console.log(``);
+  }
+  console.log(
+    `Result: ${result.ok ? 'OK' : 'INCOMPLETE'} (exit ${result.exitCode ?? DIFF_EXIT.SUCCESS})`,
+  );
+  console.log(`Phase 1 LKG and source inventories were NOT modified.`);
+}
+
+/** @param {unknown} err @param {ReturnType<typeof parseArgs>} args */
+function failDiff(err, args) {
+  const message = err instanceof Error ? err.message : String(err);
+  if (args.json) {
+    console.log(JSON.stringify({ ok: false, error: message }, null, 2));
+  } else {
+    console.error(`Error: ${message}`);
+    console.error('Phase 1 LKG and source inventories were NOT modified.');
+  }
+  process.exit(DIFF_EXIT.FAILURE);
+}
+
+function printExtractHuman(result, repoRoot) {
   console.log(`Floatplane frontend evidence (Phase 2.1)`);
   console.log(`---------------------------------------`);
   console.log(`Extractor:     ${EXTRACTOR_ID}@${EXTRACTOR_VERSION}`);
@@ -134,28 +288,44 @@ function printHuman(result, repoRoot) {
 }
 
 function printHelp() {
-  console.log(`Floatplane frontend evidence (Phase 2.1)
+  console.log(`Floatplane frontend evidence (Phase 2.1 + 2.2)
 
 Commands:
-  extract     BFS reachable Vite chunks for one observation, archive JS bytes,
-              extract API/network evidence, write phase2/ inventory
+  extract       BFS reachable Vite chunks + API/network evidence (Phase 2.1)
+  diff          Semantic compare of two archived evidence inventories (Phase 2.2)
+  diff-latest   Compare the two most recent complete inventories (if ≥2 exist)
 
-Options:
+Extract options:
   --observation <id>  Observation id (default: last-known-frontend.json)
-  --build <id>        Build id hint (optional; scanned if omitted)
+  --build <id>        Build id hint
+
+Diff options:
+  --from <id>         From observation id (required for diff)
+  --to <id>           To observation id (required for diff)
+  --from-build <id>   Optional build hint for FROM
+  --to-build <id>     Optional build hint for TO
+  --label-as-real     Mark report as real Floatplane observations
+  --label-as-fixture  Mark report as controlled/fixture (never as real FP change)
+
+Shared options:
   --json              Machine-readable JSON on stdout
-  --dry-run           Compute graph+evidence; do not write phase2/
-  --force             Re-run even if a complete inventory already exists
-  --state <path>      State file (default: state/last-known-frontend.json)
+  --dry-run           Compute without writing artifacts
+  --force             Re-run even if idempotent output exists
+  --state <path>      State file (extract only; default: state/last-known-frontend.json)
   --artifacts <path>  Artifacts root (default: artifacts/frontend)
   -h, --help          Show help
+
+Makefile:
+  make frontend-evidence-diff FROM=<obs> TO=<obs>
+  make frontend-evidence-diff-latest
 
 Exit codes:
   0  success
   1  operational failure
-  3  incomplete collection (no complete inventory)
+  3  incomplete extract, or diff with incomplete/removal-suppressed sides
 
-Phase 1 LKG state is never modified by this tool.
+Phase 1 LKG state and source evidence inventories are never modified.
+Diff operates offline from archived Phase 1/2 artifacts only.
 `);
 }
 
@@ -171,6 +341,12 @@ function parseArgs(argv) {
     artifacts: null,
     observation: null,
     build: null,
+    from: null,
+    to: null,
+    fromBuild: null,
+    toBuild: null,
+    /** @type {boolean | undefined} */
+    labelAsReal: undefined,
   };
   const positional = [];
   for (let i = 0; i < argv.length; i++) {
@@ -183,6 +359,12 @@ function parseArgs(argv) {
     else if (a === '--artifacts') out.artifacts = argv[++i];
     else if (a === '--observation') out.observation = argv[++i];
     else if (a === '--build') out.build = argv[++i];
+    else if (a === '--from') out.from = argv[++i];
+    else if (a === '--to') out.to = argv[++i];
+    else if (a === '--from-build') out.fromBuild = argv[++i];
+    else if (a === '--to-build') out.toBuild = argv[++i];
+    else if (a === '--label-as-real') out.labelAsReal = true;
+    else if (a === '--label-as-fixture') out.labelAsReal = false;
     else if (a.startsWith('-')) {
       console.error(`Unknown option: ${a}`);
       out.help = true;
