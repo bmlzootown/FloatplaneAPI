@@ -5,3 +5,9 @@
 **/.DS_Store
 
 .hypothesis/
+
+# Phase 1 frontend watch — keep layout docs; ignore downloaded bundles
+/artifacts/frontend/**
+!/artifacts/frontend/.gitkeep
+!/artifacts/frontend/README.md
+/tests/frontend-watch/.tmp-watch/

@@ -14,7 +14,10 @@
     "widdershins": "4.0.1"
   },
   "scripts": {
-    "preinstall": "npx only-allow pnpm"
+    "preinstall": "npx only-allow pnpm",
+    "frontend-watch-test": "node --test tests/frontend-watch/frontend-watch.test.mjs",
+    "frontend-discover": "node tools/fp-frontend-watch/cli.mjs discover",
+    "frontend-check": "node tools/fp-frontend-watch/cli.mjs check"
   },
   "repository": {
     "type": "git",

@@ -80,27 +80,63 @@ Then, open `/Docs/index.html` to view the changes. A Dockerfile is also availabl
 docker build --tag fpapidocs:latest .
 ```
 
-### Analyze difference between Floatplane frontends
+### Frontend deployment watch (Phase 1)
 
-The list of APIs was generated from the Floatplane frontend files, available at https://frontend.floatplane.com/{version}/*.js
+Floatplane ships frontend updates silently. Phase 1 of **Floatplane API Watch** detects and archives the currently deployed frontend without assuming `fp-frontend-versions.txt` is current.
 
-When a new version of the Floatplane frontend is released (which is done silently), we can analyze the differences between the files to find new endpoints being used. To do so more easily, some tools are included:
+**Discovery method:** one unauthenticated GET of `https://www.floatplane.com/`, then parse asset URLs pointing at `frontend.floatplane.com`. The current layout embeds a build id in paths such as `/user/{buildId}/js/index-….js` and `/user/{buildId}/manifest.floatplane.webmanifest`. That is preferred over guessing versions from historical files because it reflects what the site actually serves, needs no auth, and is a single lightweight request.
+
+**Run a check:**
+
+```sh
+# Offline unit tests (fixtures/mocks only — Floatplane need not be reachable)
+make frontend-watch-test
+# or: pnpm run frontend-watch-test
+
+# Live read-only discovery / full check
+make frontend-discover
+make frontend-check
+# or: node tools/fp-frontend-watch/cli.mjs discover|check [--json] [--dry-run]
+```
+
+**Exit codes:** `0` unchanged · `1` operational failure · `2` change detected (new build id, same id with different SHA-256, or archive content conflict).
+
+**State:** `state/last-known-frontend.json` (see `state/README.md`). Failed checks never overwrite last-known-good state.
+
+**Artifact layout** (downloaded JS is gitignored; see `artifacts/frontend/README.md`):
+
+```
+artifacts/frontend/{buildId}/
+  _discovery/homepage.html
+  _meta/observation.json
+  js/index-*.js
+  manifest.floatplane.webmanifest
+  _conflicts/{timestamp}/…    # same path, different bytes — original kept
+```
+
+**Same-version-changed:** build id and bundle hashes are independent. If the id is unchanged but bytes differ, that is a change. If an archived file would be overwritten with different contents, the original is kept and the new bytes are stored under `_conflicts/` with a noteworthy note. Homepage HTML is archived under `_discovery/` for evidence but is **not** part of compared identity (it often includes volatile challenge markup).
+
+**Not implemented yet (later phases):** API string extraction/classification, automatic OpenAPI/AsyncAPI edits, Hydravion impact analysis, scheduled CI watch workflow. Lazy JS chunks referenced from the entry module are also not fetched in Phase 1 (entry + manifest suffice for build-id/content change detection with minimal load).
+
+### Manual frontend fetch / diff (legacy helpers)
+
+Historical Angular-era bundles lived at `https://frontend.floatplane.com/{version}/*.js`. Manual helpers remain for ad-hoc work:
 
 1. Clone this repository
 2. Change directory into the `/tools` folder: `cd tools`
 3. Fetch the frontend files for the **previous** version: `./fp-frontend-fetch-2.sh <previous version number>`
 	1. E.g. `./fp-frontend-fetch-2.sh 4.0.12`
 	2. This assumes that `wget` is installed on the system
-4. Fetch the frontend files for the **current** version: `./fp-frontend-fetch-2.sh <previous version number>`
-	1. E.g. `./fp-frontend-fetch.sh 4.0.13`
+4. Fetch the frontend files for the **current** version: `./fp-frontend-fetch-2.sh <current version number>`
+	1. E.g. `./fp-frontend-fetch-2.sh 4.0.13`
 5. Un-minify the files: `prettier --write Frontend/4.0.12 && prettier --write Frontend/4.0.13`
 	1. This assumes that [Prettier](https://prettier.io/) is installed on the system
 6. Perform a quick diff to clean up the files and see which files differ: `./fp-frontend-diff-2.sh <previous version> <current version>`
-	1. E.g. `./fp-frontend-diff.sh 4.0.12 4.0.13`
+	1. E.g. `./fp-frontend-diff-2.sh 4.0.12 4.0.13`
 	2. The cleanup replaces references of the version numbers in, specifically, `main.js` with a common piece of text in order to avoid many false-positives in the resulting diffs.
 7. Then, manually inspect the diff of the files listed to see what has changed.
 
-The file `fp-frontend-version.txt` is a collection of recent version changes that Floatplane has made, starting with `3.5.1`. This may be updated irregularly.
+Prefer `tools/fp-frontend-watch` for discovering the live build. The file `fp-frontend-versions.txt` is a historical list of version labels (starting with `3.5.1`); it is not used as the source of truth for the currently deployed frontend.
 
 ### Integration Testing
 

@@ -8,6 +8,7 @@ help:
 	@echo 'Available commands:'
 	@echo "clean validate test docs-all"
 	@echo "docs-trimmed docs-full docs-async"
+	@echo "frontend-watch-test frontend-discover frontend-check"
 
 # Section: Helpers and structural
 
@@ -30,6 +31,16 @@ yaml: validate validate-trimmed docs-skeleton
 	npx openapi-generator-cli validate -i Docs/floatplane-openapi-specification-trimmed.yaml
 test: validate trim
 	cd tests/SchemaThesisTests; poetry run pytest -v -s
+
+# Phase 1: Floatplane frontend deployment watch (offline unit tests; no live FP required)
+frontend-watch-test:
+	node --test tests/frontend-watch/frontend-watch.test.mjs
+
+frontend-discover:
+	node tools/fp-frontend-watch/cli.mjs discover
+
+frontend-check:
+	node tools/fp-frontend-watch/cli.mjs check
 
 # Section: Trimmed docs
 
