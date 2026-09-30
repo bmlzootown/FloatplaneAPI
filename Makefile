@@ -119,6 +119,7 @@ docs-swaggerui: docs-skeleton validate-trimmed
 	sed -i.bak -e 's/floatplane-openapi-specification.json/floatplane-openapi-specification-trimmed.json/g' Docs/SwaggerUI/index.html
 # Human-friendly static explorer (browse + try-it / copy-curl). Pure static; no monitoring impact.
 # Depends on trim only (not openapi-generator) so it stays easy to generate locally.
+# REST try-it uses Bearer (Keycloak access token); sails.sid is chat/Socket.IO-only in the UI.
 docs-explorer: docs-skeleton trim
 	mkdir -p Docs/Explorer
 	cp static/explorer/index.html static/explorer/styles.css static/explorer/app.js static/explorer/README.md Docs/Explorer/

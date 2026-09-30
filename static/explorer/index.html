@@ -26,29 +26,50 @@
 	</header>
 
 	<section class="auth-bar" aria-label="Authentication">
-		<div class="auth-fields">
+		<div class="auth-primary">
+			<p class="auth-heading">REST auth (Keycloak access token)</p>
+			<div class="auth-fields">
+				<label class="field field-token">
+					<span>Bearer access token</span>
+					<input id="auth-token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste Keycloak access token (stored only in this browser)">
+				</label>
+				<label class="field field-grow">
+					<span>Base URL</span>
+					<input id="base-url" type="url" spellcheck="false" value="https://www.floatplane.com">
+				</label>
+				<label class="field field-ua">
+					<span>User-Agent</span>
+					<input id="user-agent" type="text" spellcheck="false" value="FloatplaneAPI-Explorer/1.0">
+				</label>
+			</div>
+			<div class="auth-actions">
+				<button type="button" class="btn ghost" id="toggle-token-vis" aria-pressed="false">Show token</button>
+				<button type="button" class="btn ghost" id="clear-auth">Clear local auth</button>
+			</div>
+			<p class="auth-note">
+				Modern third-party REST clients use <code>Authorization: Bearer &lt;access_token&gt;</code> from Keycloak — not cookies.
+				Token stays in <code>localStorage</code> on this device — never commit it.
+				<strong>Copy curl</strong> is the reliable try path; live browser Send may still fail on CORS.
+			</p>
+			<p class="auth-note auth-note-gap" id="openapi-auth-gap">
+				OpenAPI in this repo still documents only <code>CookieAuth</code> (<code>sails.sid</code>). The explorer surfaces Bearer for REST try-it because current Floatplane clients send Bearer tokens; updating the OpenAPI security scheme is a separate docs task.
+			</p>
+		</div>
+
+		<details class="auth-secondary">
+			<summary>Chat / Socket.IO only — sails.sid cookie (legacy for REST)</summary>
+			<p class="auth-note">
+				<code>sails.sid</code> is still used for livestream chat / AsyncAPI Socket.IO authentication.
+				It is <strong>not</strong> the modern third-party REST auth path and is <strong>not</strong> attached to Explorer REST curl or Send.
+			</p>
 			<label class="field">
-				<span>sails.sid cookie</span>
-				<input id="auth-cookie" type="password" autocomplete="off" spellcheck="false" placeholder="Paste session cookie value (stored only in this browser)">
+				<span>sails.sid (chat only)</span>
+				<input id="auth-cookie" type="password" autocomplete="off" spellcheck="false" placeholder="Optional — for chat tooling reference only">
 			</label>
-			<label class="field field-grow">
-				<span>Base URL</span>
-				<input id="base-url" type="url" spellcheck="false" value="https://www.floatplane.com">
-			</label>
-			<label class="field field-ua">
-				<span>User-Agent</span>
-				<input id="user-agent" type="text" spellcheck="false" value="FloatplaneAPI-Explorer/1.0">
-			</label>
-		</div>
-		<div class="auth-actions">
-			<button type="button" class="btn ghost" id="toggle-cookie-vis" aria-pressed="false">Show cookie</button>
-			<button type="button" class="btn ghost" id="clear-auth">Clear local auth</button>
-		</div>
-		<p class="auth-note">
-			Cookie stays in <code>localStorage</code> on this device — never commit it.
-			Browsers block setting <code>Cookie</code> on cross-origin fetch and Floatplane likely rejects CORS from this origin.
-			<strong>Copy curl</strong> is the reliable try path; optional local proxy base URL can enable live Send.
-		</p>
+			<div class="auth-actions">
+				<button type="button" class="btn ghost" id="toggle-cookie-vis" aria-pressed="false">Show cookie</button>
+			</div>
+		</details>
 	</section>
 
 	<main class="layout">
@@ -99,8 +120,9 @@
 								<button type="submit" class="btn secondary" id="send-request">Send request</button>
 							</div>
 							<p class="cors-callout" id="cors-callout">
-								Live Send from a static page to <code>www.floatplane.com</code> usually fails (CORS + Cookie).
-								Use Copy curl in a terminal, or point Base URL at a local reverse proxy that injects <code>sails.sid</code>.
+								REST try-it uses <code>Authorization: Bearer …</code> when a token is set.
+								Live Send from a static page to <code>www.floatplane.com</code> may still fail (CORS).
+								Use Copy curl in a terminal, or point Base URL at a local proxy if needed.
 							</p>
 						</form>
 					</section>
@@ -116,7 +138,7 @@
 	</main>
 
 	<footer class="site-footer">
-		<p>Source: trimmed OpenAPI from this repo. Undocumented TODO stubs are filtered out by <code>make trim</code>.</p>
+		<p>Source: trimmed OpenAPI from this repo. Undocumented TODO stubs are filtered out by <code>make trim</code>. REST auth in this explorer is Bearer (Keycloak); OpenAPI may still list CookieAuth until updated.</p>
 	</footer>
 
 	<script src="app.js" type="module"></script>

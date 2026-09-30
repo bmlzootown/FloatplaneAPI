@@ -48,7 +48,7 @@ The API specifications can also be used to generate documentation. Pre-generated
 
 ### API Explorer (browse + try-it)
 
-A static, human-oriented explorer for documented (trimmed) endpoints — search, tag filters, request builder, local `sails.sid` storage, and **Copy curl**. Live browser **Send** to `www.floatplane.com` is usually blocked by CORS and the inability to set `Cookie` cross-origin; use curl or an optional local proxy base URL.
+A static, human-oriented explorer for documented (trimmed) endpoints — search, tag filters, request builder, local **Bearer access token** storage for REST (`Authorization: Bearer …`), and **Copy curl**. `sails.sid` is chat/Socket.IO-only and is demoted in the UI. Live browser **Send** to `www.floatplane.com` may still be blocked by CORS; use curl or an optional local proxy base URL. OpenAPI may still list only `CookieAuth` — explorer REST auth is Bearer ahead of that docs lag.
 
 ```sh
 make docs-explorer

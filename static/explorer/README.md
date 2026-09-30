@@ -28,9 +28,12 @@ Then open [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
 
 ## Auth & try-it
 
-1. Log in on floatplane.com in a normal browser.
-2. Copy the `sails.sid` cookie value into the Explorer auth field (stored in `localStorage` only).
-3. Prefer **Copy curl** and run it in a terminal — browsers cannot set `Cookie` on cross-origin requests, and Floatplane does not allow CORS from arbitrary origins.
-4. Optional: point **Base URL** at a local reverse proxy that injects `Cookie: sails.sid=…` if you want live **Send request** from the page.
+**REST (primary):** paste a Keycloak **access token**. Explorer attaches `Authorization: Bearer …` on Copy curl and Send. This is the modern third-party REST path (current Floatplane clients send Bearer tokens).
 
-Never commit cookie values.
+**Chat / Socket.IO only:** `sails.sid` remains relevant for livestream chat AsyncAPI connections. It is demoted in the UI and is **not** attached to REST try-it.
+
+**OpenAPI gap:** the checked-in OpenAPI still documents only `CookieAuth` (`sails.sid`). The explorer surfaces Bearer for REST anyway; aligning the OpenAPI security scheme is a separate documentation task (not inventing endpoint behavior here).
+
+Prefer **Copy curl** in a terminal. Live browser **Send** to `www.floatplane.com` may still fail on CORS. Optional: point **Base URL** at a local reverse proxy.
+
+Never commit tokens or cookie values.

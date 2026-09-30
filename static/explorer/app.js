@@ -1,4 +1,5 @@
 const STORAGE_KEYS = {
+	token: "fpExplorer.accessToken",
 	cookie: "fpExplorer.sailsSid",
 	baseUrl: "fpExplorer.baseUrl",
 	userAgent: "fpExplorer.userAgent",
@@ -43,9 +44,11 @@ const els = {
 	responsePanel: document.getElementById("response-panel"),
 	responseMeta: document.getElementById("response-meta"),
 	responseBody: document.getElementById("response-body"),
+	authToken: document.getElementById("auth-token"),
 	authCookie: document.getElementById("auth-cookie"),
 	baseUrl: document.getElementById("base-url"),
 	userAgent: document.getElementById("user-agent"),
+	toggleToken: document.getElementById("toggle-token-vis"),
 	toggleCookie: document.getElementById("toggle-cookie-vis"),
 	clearAuth: document.getElementById("clear-auth"),
 };
@@ -197,10 +200,17 @@ function buildOperations(spec) {
 	return ops;
 }
 
+/** True when the OpenAPI op is not explicitly public (security: []). */
 function needsAuth(op) {
 	if (!op.security) return true;
 	if (Array.isArray(op.security) && op.security.length === 0) return false;
-	return op.security.some((entry) => Object.keys(entry).includes("CookieAuth"));
+	return true;
+}
+
+function authLabel(op) {
+	if (!needsAuth(op)) return "no auth required (OpenAPI)";
+	// Explorer uses Bearer for REST; OpenAPI may still list only CookieAuth.
+	return "Bearer (Keycloak) · OpenAPI still lists CookieAuth";
 }
 
 function filteredOperations() {
@@ -384,7 +394,7 @@ function selectOperation(id) {
 	els.method.className = `method-badge ${op.method}`;
 	els.path.textContent = op.path;
 	els.summary.textContent = op.summary || "Untitled operation";
-	els.tags.textContent = op.tags.join(" · ") + (needsAuth(op) ? " · CookieAuth" : " · no CookieAuth required");
+	els.tags.textContent = op.tags.join(" · ") + " · " + authLabel(op);
 	els.description.textContent = op.description || "";
 
 	renderParamBlock(els.pathParams, "Path parameters", op.parameters.filter((p) => p.in === "path"));
@@ -446,9 +456,9 @@ function buildCurl(op) {
 	for (const [name, value] of Object.entries(values.header)) {
 		lines.push(`  -H '${name}: ${value.replaceAll("'", "'\\''")}'`);
 	}
-	const cookie = els.authCookie.value.trim();
-	if (cookie && needsAuth(op)) {
-		lines.push(`  -H 'Cookie: sails.sid=${cookie.replaceAll("'", "'\\''")}'`);
+	const token = els.authToken.value.trim();
+	if (token && needsAuth(op)) {
+		lines.push(`  -H 'Authorization: Bearer ${token.replaceAll("'", "'\\''")}'`);
 	}
 	if (!els.bodyField.hidden && els.requestBody.value.trim()) {
 		lines.push(`  -H 'Content-Type: application/json'`);
@@ -467,7 +477,10 @@ async function sendRequest(op) {
 	for (const [name, value] of Object.entries(values.header)) {
 		headers.set(name, value);
 	}
-	const cookie = els.authCookie.value.trim();
+	const token = els.authToken.value.trim();
+	if (token && needsAuth(op)) {
+		headers.set("Authorization", `Bearer ${token}`);
+	}
 	const init = {
 		method: op.method.toUpperCase(),
 		headers,
@@ -481,11 +494,14 @@ async function sendRequest(op) {
 	const notes = [];
 	const host = new URL(url).hostname;
 	if (host.endsWith("floatplane.com")) {
-		notes.push("Target is Floatplane. Browser Cookie header cannot be set cross-origin; Send may fail with CORS.");
+		notes.push("Target is Floatplane. Live Send may fail with CORS from this origin.");
 	}
-	if (cookie) {
-		notes.push("sails.sid is available for curl/proxy use; this browser fetch will not attach it as a Cookie header.");
+	if (token && needsAuth(op)) {
+		notes.push("Authorization: Bearer is attached for this request (modern REST / Keycloak access token).");
+	} else if (needsAuth(op)) {
+		notes.push("No Bearer token set — authenticated REST calls will likely fail.");
 	}
+	notes.push("sails.sid cookie is chat/Socket.IO-only and is not sent with Explorer REST requests.");
 
 	const started = performance.now();
 	try {
@@ -512,18 +528,20 @@ async function sendRequest(op) {
 			notes.join("\n"),
 			String(err && err.message ? err.message : err),
 			"",
-			"Likely CORS or network block. Use Copy curl, or point Base URL at a local proxy that adds Cookie: sails.sid=…",
+			"Likely CORS or network block. Use Copy curl with Authorization: Bearer …, or point Base URL at a local proxy.",
 		].filter(Boolean).join("\n");
 	}
 }
 
 function persistAuth() {
+	localStorage.setItem(STORAGE_KEYS.token, els.authToken.value);
 	localStorage.setItem(STORAGE_KEYS.cookie, els.authCookie.value);
 	localStorage.setItem(STORAGE_KEYS.baseUrl, els.baseUrl.value);
 	localStorage.setItem(STORAGE_KEYS.userAgent, els.userAgent.value);
 }
 
 function restoreAuth() {
+	els.authToken.value = localStorage.getItem(STORAGE_KEYS.token) || "";
 	els.authCookie.value = localStorage.getItem(STORAGE_KEYS.cookie) || "";
 	els.baseUrl.value = localStorage.getItem(STORAGE_KEYS.baseUrl) || "https://www.floatplane.com";
 	els.userAgent.value = localStorage.getItem(STORAGE_KEYS.userAgent) || "FloatplaneAPI-Explorer/1.0";
@@ -554,10 +572,17 @@ function wireEvents() {
 		}
 	});
 
-	for (const input of [els.authCookie, els.baseUrl, els.userAgent]) {
+	for (const input of [els.authToken, els.authCookie, els.baseUrl, els.userAgent]) {
 		input.addEventListener("change", persistAuth);
 		input.addEventListener("blur", persistAuth);
 	}
+
+	els.toggleToken.addEventListener("click", () => {
+		const show = els.authToken.type === "password";
+		els.authToken.type = show ? "text" : "password";
+		els.toggleToken.setAttribute("aria-pressed", show ? "true" : "false");
+		els.toggleToken.textContent = show ? "Hide token" : "Show token";
+	});
 
 	els.toggleCookie.addEventListener("click", () => {
 		const show = els.authCookie.type === "password";
@@ -567,9 +592,11 @@ function wireEvents() {
 	});
 
 	els.clearAuth.addEventListener("click", () => {
+		els.authToken.value = "";
 		els.authCookie.value = "";
+		localStorage.removeItem(STORAGE_KEYS.token);
 		localStorage.removeItem(STORAGE_KEYS.cookie);
-		toast("Local cookie cleared");
+		toast("Local auth cleared");
 	});
 }
 
