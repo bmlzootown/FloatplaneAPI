@@ -190,6 +190,14 @@ body {
 	letter-spacing: 0.04em;
 }
 
+.field[hidden],
+.param-block[hidden],
+.panel[hidden],
+.detail[hidden],
+.empty-detail[hidden] {
+	display: none !important;
+}
+
 .field input,
 .field textarea,
 .search-field input {

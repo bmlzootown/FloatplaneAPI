@@ -584,9 +584,12 @@ async function main() {
 		els.status.textContent = `${state.operations.length} documented ops · OpenAPI ${json.openapi || "3"} · spec ${version} · loaded ${url}`;
 		renderTags();
 		renderList();
-		const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
+		const hash = decodeURIComponent((location.hash || "").replace(/^#/, ""));
 		if (hash && state.operations.some((op) => op.id === hash)) {
 			selectOperation(hash);
+		} else if (state.operations[0]) {
+			// Land on first documented op so the detail pane is never an empty void on first paint.
+			selectOperation(state.operations[0].id);
 		}
 	} catch (err) {
 		els.status.textContent = "Failed to load OpenAPI";
