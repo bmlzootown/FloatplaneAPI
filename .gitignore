@@ -2,6 +2,7 @@
 /Docs
 /tools/Frontend
 /src/floatplane-openapi-specification-trimmed.json
+/static/explorer/spec.json
 **/.DS_Store
 
 .hypothesis/

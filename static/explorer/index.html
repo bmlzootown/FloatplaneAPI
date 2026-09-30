@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="description" content="Browse and try Floatplane REST API endpoints from the trimmed OpenAPI spec.">
+	<title>Floatplane API Explorer</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+	<div class="atmosphere" aria-hidden="true"></div>
+
+	<header class="site-header">
+		<div class="brand-block">
+			<p class="brand-mark">Floatplane API</p>
+			<h1 class="brand-title">Explorer</h1>
+			<p class="brand-lede">Browse documented endpoints from the trimmed OpenAPI spec, shape a request, and copy a ready-to-run curl — without Swagger density.</p>
+		</div>
+		<div class="header-meta">
+			<p class="spec-status" id="spec-status">Loading trimmed OpenAPI…</p>
+			<a class="text-link" href="../index.html">All docs</a>
+		</div>
+	</header>
+
+	<section class="auth-bar" aria-label="Authentication">
+		<div class="auth-fields">
+			<label class="field">
+				<span>sails.sid cookie</span>
+				<input id="auth-cookie" type="password" autocomplete="off" spellcheck="false" placeholder="Paste session cookie value (stored only in this browser)">
+			</label>
+			<label class="field field-grow">
+				<span>Base URL</span>
+				<input id="base-url" type="url" spellcheck="false" value="https://www.floatplane.com">
+			</label>
+			<label class="field field-ua">
+				<span>User-Agent</span>
+				<input id="user-agent" type="text" spellcheck="false" value="FloatplaneAPI-Explorer/1.0">
+			</label>
+		</div>
+		<div class="auth-actions">
+			<button type="button" class="btn ghost" id="toggle-cookie-vis" aria-pressed="false">Show cookie</button>
+			<button type="button" class="btn ghost" id="clear-auth">Clear local auth</button>
+		</div>
+		<p class="auth-note">
+			Cookie stays in <code>localStorage</code> on this device — never commit it.
+			Browsers block setting <code>Cookie</code> on cross-origin fetch and Floatplane likely rejects CORS from this origin.
+			<strong>Copy curl</strong> is the reliable try path; optional local proxy base URL can enable live Send.
+		</p>
+	</section>
+
+	<main class="layout">
+		<aside class="browse-pane">
+			<div class="browse-controls">
+				<label class="search-field">
+					<span class="visually-hidden">Search endpoints</span>
+					<input id="search" type="search" placeholder="Search method, path, tag, summary…" autofocus>
+				</label>
+				<div class="tag-row" id="tag-filters" role="toolbar" aria-label="Filter by tag"></div>
+			</div>
+			<div class="endpoint-list" id="endpoint-list" role="listbox" aria-label="Endpoints"></div>
+		</aside>
+
+		<section class="detail-pane" id="detail-pane" aria-live="polite">
+			<div class="empty-detail" id="empty-detail">
+				<p class="empty-kicker">Select an endpoint</p>
+				<p>Pick a documented operation to inspect parameters, build a request, and copy curl.</p>
+			</div>
+			<article class="detail" id="detail" hidden>
+				<header class="detail-head">
+					<div class="method-path">
+						<span class="method-badge" id="detail-method"></span>
+						<code class="detail-path" id="detail-path"></code>
+					</div>
+					<p class="detail-summary" id="detail-summary"></p>
+					<p class="detail-tags" id="detail-tags"></p>
+				</header>
+
+				<div class="detail-grid">
+					<section class="panel">
+						<h2>About</h2>
+						<div class="prose" id="detail-description"></div>
+					</section>
+
+					<section class="panel">
+						<h2>Try it</h2>
+						<form id="try-form" class="try-form">
+							<div id="path-params" class="param-block"></div>
+							<div id="query-params" class="param-block"></div>
+							<div id="header-params" class="param-block"></div>
+							<label class="field body-field" id="body-field" hidden>
+								<span>JSON body</span>
+								<textarea id="request-body" rows="10" spellcheck="false"></textarea>
+							</label>
+							<div class="try-actions">
+								<button type="button" class="btn primary" id="copy-curl">Copy curl</button>
+								<button type="submit" class="btn secondary" id="send-request">Send request</button>
+							</div>
+							<p class="cors-callout" id="cors-callout">
+								Live Send from a static page to <code>www.floatplane.com</code> usually fails (CORS + Cookie).
+								Use Copy curl in a terminal, or point Base URL at a local reverse proxy that injects <code>sails.sid</code>.
+							</p>
+						</form>
+					</section>
+
+					<section class="panel" id="response-panel" hidden>
+						<h2>Response</h2>
+						<div class="response-meta" id="response-meta"></div>
+						<pre class="response-body" id="response-body"></pre>
+					</section>
+				</div>
+			</article>
+		</section>
+	</main>
+
+	<footer class="site-footer">
+		<p>Source: trimmed OpenAPI from this repo. Undocumented TODO stubs are filtered out by <code>make trim</code>.</p>
+	</footer>
+
+	<script src="app.js" type="module"></script>
+</body>
+</html>
