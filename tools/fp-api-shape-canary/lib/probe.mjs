@@ -108,22 +108,35 @@ export function redactToken(token) {
 
 /**
  * Pick a creator id from subscriptions payload (shape-tolerant).
+ * Live shape (2026-10-02): `creator` is a string id; older shapes may nest `{id}`.
  * @param {unknown} body
  * @returns {string|null}
  */
 export function pickCreatorIdFromSubscriptions(body) {
-  if (!body) return null;
+  const ids = listCreatorIdsFromSubscriptions(body);
+  return ids[0] || null;
+}
+
+/**
+ * Ordered unique creator ids from a subscriptions response.
+ * @param {unknown} body
+ * @returns {string[]}
+ */
+export function listCreatorIdsFromSubscriptions(body) {
+  if (!body) return [];
   const list = Array.isArray(body) ? body : body.items || body.subscriptions || null;
-  if (!Array.isArray(list) || list.length === 0) return null;
-  const first = list[0];
-  if (!first || typeof first !== 'object') return null;
-  return (
-    first.creator?.id ||
-    first.creatorId ||
-    first.id ||
-    first.plan?.creatorId ||
-    null
-  );
+  if (!Array.isArray(list) || list.length === 0) return [];
+  /** @type {string[]} */
+  const ids = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    let id = null;
+    if (typeof item.creator === 'string' && item.creator) id = item.creator;
+    else if (item.creator && typeof item.creator === 'object' && item.creator.id) id = item.creator.id;
+    else id = item.creatorId || item.plan?.creator || item.plan?.creatorId || null;
+    if (typeof id === 'string' && id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
 }
 
 /**

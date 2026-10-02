@@ -20,6 +20,7 @@ import { diffBaselineMaps, formatDiffReportMarkdown } from './diff.mjs';
 import { importDpopKeyPair } from './dpop.mjs';
 import {
   apiGetJson,
+  listCreatorIdsFromSubscriptions,
   pickCreatorIdFromSubscriptions,
   pickPostIdFromCreatorList,
   pickVideoAttachmentId,
@@ -252,7 +253,9 @@ export async function runCapture(opts) {
       else errors.push(`user-self HTTP ${result.status}`);
     }
 
-    // 2) subscriptions → creator id
+    // 2) subscriptions → creator id(s)
+    /** @type {string[]} */
+    let creatorIds = [];
     {
       const ep = ALLOWLIST.find((e) => e.id === 'user-subscriptions');
       const result = await getJson({ path: ep.path });
@@ -266,34 +269,48 @@ export async function runCapture(opts) {
       });
       if (result.ok && result.json != null) {
         trees[ep.id] = buildFieldTree(result.json);
-        if (!creatorId) creatorId = pickCreatorIdFromSubscriptions(result.json);
+        creatorIds = listCreatorIdsFromSubscriptions(result.json);
+        if (creatorId && !creatorIds.includes(creatorId)) creatorIds.unshift(creatorId);
+        if (!creatorId) creatorId = creatorIds[0] || null;
       } else {
         errors.push(`user-subscriptions HTTP ${result.status}`);
       }
     }
 
-    if (!creatorId) {
+    if (creatorId && creatorIds.length === 0) creatorIds = [creatorId];
+
+    if (creatorIds.length === 0) {
       notes.push('No creatorId from subscriptions; pass --creator-id to continue list/post probe');
     } else {
+      // 3) content/creator?limit=1 — try subscribed creators until a post id appears
       const ep = ALLOWLIST.find((e) => e.id === 'content-creator');
-      const result = await getJson({
-        path: ep.path,
-        query: { id: creatorId, limit: 1 },
-      });
-      calls.push({
-        id: ep.id,
-        method: 'GET',
-        path: ep.path,
-        status: result.status,
-        ok: result.ok,
-        auth: result.authScheme,
-        query: { id: '(redacted)', limit: 1 },
-      });
-      if (result.ok && result.json != null) {
-        trees[ep.id] = buildFieldTree(result.json);
-        if (!postId) postId = pickPostIdFromCreatorList(result.json);
-      } else {
-        errors.push(`content-creator HTTP ${result.status}`);
+      for (const candidate of creatorIds) {
+        const result = await getJson({
+          path: ep.path,
+          query: { id: candidate, limit: 1 },
+        });
+        calls.push({
+          id: ep.id,
+          method: 'GET',
+          path: ep.path,
+          status: result.status,
+          ok: result.ok,
+          auth: result.authScheme,
+          query: { id: '(redacted)', limit: 1 },
+          creatorAttempt: candidate === creatorIds[0] ? 'first' : 'fallback',
+        });
+        if (result.ok && result.json != null) {
+          trees[ep.id] = buildFieldTree(result.json);
+          const found = pickPostIdFromCreatorList(result.json);
+          if (found) {
+            creatorId = candidate;
+            if (!postId) postId = found;
+            break;
+          }
+          notes.push(`content-creator for a subscribed creator returned no posts; trying next`);
+        } else {
+          errors.push(`content-creator HTTP ${result.status}`);
+        }
       }
     }
 
@@ -366,6 +383,18 @@ export async function runCapture(opts) {
     } else {
       notes.push('No baselines yet — first capture; use --promote-baselines to seed baselines/');
     }
+  } else if (diff) {
+    // Endpoints without a prior baseline are first observations, not regressions.
+    let realDrift = false;
+    for (const [id, d] of Object.entries(diff.byEndpoint)) {
+      if (!baselines[id] && trees[id]) {
+        d.hasDrift = false;
+        d.note = d.note || 'first observation for endpoint (seeding baseline)';
+        continue;
+      }
+      if (d.hasDrift) realDrift = true;
+    }
+    diff.hasDrift = realDrift;
   }
 
   const reportMd =

@@ -1,0 +1,482 @@
+{
+  "schemaVersion": 1,
+  "toolId": "fp-api-shape-canary",
+  "toolVersion": "3.0.0",
+  "endpointId": "content-post",
+  "label": "observed",
+  "updatedAt": "2026-10-02T15:45:53.514Z",
+  "sourceCaptureId": "2026-10-02T15-45-52-581Z",
+  "tree": {
+    "type": "object",
+    "properties": {
+      "attachmentOrder": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "lengthObserved": 1
+      },
+      "audioAttachments": {
+        "type": "array",
+        "items": {
+          "type": "unknown"
+        },
+        "lengthObserved": 0
+      },
+      "channel": {
+        "type": "object",
+        "properties": {
+          "about": {
+            "type": "string"
+          },
+          "card": {
+            "type": "null"
+          },
+          "cover": {
+            "type": "null"
+          },
+          "creator": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "object",
+            "properties": {
+              "childImages": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "height": {
+                      "type": "number"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "width": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "lengthObserved": 2
+              },
+              "height": {
+                "type": "number"
+              },
+              "path": {
+                "type": "string"
+              },
+              "width": {
+                "type": "number"
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "urlname": {
+            "type": "string"
+          }
+        }
+      },
+      "comments": {
+        "type": "number"
+      },
+      "creator": {
+        "type": "object",
+        "properties": {
+          "about": {
+            "type": "string"
+          },
+          "card": {
+            "type": "null"
+          },
+          "category": {
+            "type": "string"
+          },
+          "cover": {
+            "type": "null"
+          },
+          "defaultChannel": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "discoverable": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "object",
+            "properties": {
+              "childImages": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "height": {
+                      "type": "number"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "width": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "lengthObserved": 2
+              },
+              "height": {
+                "type": "number"
+              },
+              "path": {
+                "type": "string"
+              },
+              "width": {
+                "type": "number"
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "incomeDisplay": {
+            "type": "boolean"
+          },
+          "liveStream": {
+            "type": "null"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "subscriberCountDisplay": {
+            "type": "string"
+          },
+          "subscriptionPlans": {
+            "type": "null"
+          },
+          "title": {
+            "type": "string"
+          },
+          "urlname": {
+            "type": "string"
+          },
+          "visibility": {
+            "type": "string"
+          }
+        }
+      },
+      "dislikes": {
+        "type": "number"
+      },
+      "galleryAttachments": {
+        "type": "array",
+        "items": {
+          "type": "unknown"
+        },
+        "lengthObserved": 0
+      },
+      "guid": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "isAccessible": {
+        "type": "boolean"
+      },
+      "likes": {
+        "type": "number"
+      },
+      "metadata": {
+        "type": "object",
+        "properties": {
+          "audioCount": {
+            "type": "number"
+          },
+          "audioDuration": {
+            "type": "number"
+          },
+          "displayDuration": {
+            "type": "number"
+          },
+          "galleryCount": {
+            "type": "number"
+          },
+          "hasAudio": {
+            "type": "boolean"
+          },
+          "hasGallery": {
+            "type": "boolean"
+          },
+          "hasPicture": {
+            "type": "boolean"
+          },
+          "hasVideo": {
+            "type": "boolean"
+          },
+          "isFeatured": {
+            "type": "boolean"
+          },
+          "pictureCount": {
+            "type": "number"
+          },
+          "videoCount": {
+            "type": "number"
+          },
+          "videoDuration": {
+            "type": "number"
+          }
+        }
+      },
+      "pictureAttachments": {
+        "type": "array",
+        "items": {
+          "type": "unknown"
+        },
+        "lengthObserved": 0
+      },
+      "releaseDate": {
+        "type": "string"
+      },
+      "score": {
+        "type": "number"
+      },
+      "selfUserInteraction": {
+        "type": "null"
+      },
+      "tags": {
+        "type": "array",
+        "items": {
+          "type": "unknown"
+        },
+        "lengthObserved": 0
+      },
+      "text": {
+        "type": "string"
+      },
+      "textMarkdown": {
+        "type": "string"
+      },
+      "thumbnail": {
+        "type": "object",
+        "properties": {
+          "childImages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "height": {
+                  "type": "number"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "width": {
+                  "type": "number"
+                }
+              }
+            },
+            "lengthObserved": 3
+          },
+          "height": {
+            "type": "number"
+          },
+          "path": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          }
+        }
+      },
+      "title": {
+        "type": "string"
+      },
+      "type": {
+        "type": "string"
+      },
+      "userInteraction": {
+        "type": "array",
+        "items": {
+          "type": "unknown"
+        },
+        "lengthObserved": 0
+      },
+      "videoAttachments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "blogPosts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "lengthObserved": 1
+            },
+            "creator": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "dislikes": {
+              "type": "number"
+            },
+            "duration": {
+              "type": "number"
+            },
+            "guid": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "isAccessible": {
+              "type": "boolean"
+            },
+            "isProcessing": {
+              "type": "boolean"
+            },
+            "levels": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "height": {
+                    "type": "number"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "order": {
+                    "type": "number"
+                  },
+                  "width": {
+                    "type": "number"
+                  }
+                }
+              },
+              "lengthObserved": 5
+            },
+            "likes": {
+              "type": "number"
+            },
+            "primaryBlogPost": {
+              "type": "string"
+            },
+            "releaseDate": {
+              "type": "null"
+            },
+            "score": {
+              "type": "number"
+            },
+            "selfUserInteraction": {
+              "type": "null"
+            },
+            "textTracks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "generated": {
+                    "type": "boolean"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "processing": {
+                    "type": "boolean"
+                  },
+                  "src": {
+                    "type": "string"
+                  }
+                }
+              },
+              "lengthObserved": 1
+            },
+            "thumbnail": {
+              "type": "object",
+              "properties": {
+                "childImages": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "height": {
+                        "type": "number"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "width": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "lengthObserved": 3
+                },
+                "height": {
+                  "type": "number"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "width": {
+                  "type": "number"
+                }
+              }
+            },
+            "timelineSprite": {
+              "type": "object",
+              "properties": {
+                "childImages": {
+                  "type": "array",
+                  "items": {
+                    "type": "unknown"
+                  },
+                  "lengthObserved": 0
+                },
+                "height": {
+                  "type": "number"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "width": {
+                  "type": "number"
+                }
+              }
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            }
+          }
+        },
+        "lengthObserved": 1
+      },
+      "wasReleasedSilently": {
+        "type": "boolean"
+      }
+    }
+  }
+}

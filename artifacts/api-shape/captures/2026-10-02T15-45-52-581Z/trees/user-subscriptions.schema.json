@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "toolId": "fp-api-shape-canary",
+  "toolVersion": "3.0.0",
+  "endpointId": "user-subscriptions",
+  "label": "observed",
+  "captureId": "2026-10-02T15-45-52-581Z",
+  "tree": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "creator": {
+          "type": "string"
+        },
+        "endDate": {
+          "type": "string"
+        },
+        "interval": {
+          "type": "string"
+        },
+        "paymentCancelled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "paymentID": {
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "plan": {
+          "type": "object",
+          "properties": {
+            "allowGrandfatheredAccess": {
+              "type": "boolean"
+            },
+            "creator": {
+              "type": "string"
+            },
+            "currency": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "discordRoles": {
+              "type": "array",
+              "items": {
+                "type": "unknown"
+              }
+            },
+            "discordServers": {
+              "type": "array",
+              "items": {
+                "type": "unknown"
+              }
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "enabledGlobal": {
+              "type": "boolean"
+            },
+            "featured": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "logo": {
+              "type": "null"
+            },
+            "price": {
+              "type": "string"
+            },
+            "priceYearly": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "published": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            }
+          }
+        },
+        "startDate": {
+          "type": "string"
+        }
+      }
+    },
+    "lengthObserved": 3
+  }
+}

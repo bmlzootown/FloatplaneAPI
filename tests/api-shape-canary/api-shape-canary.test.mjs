@@ -7,6 +7,7 @@ import { buildFieldTree, flattenFieldTree, mergeFieldTrees } from '../../tools/f
 import { diffFieldTrees } from '../../tools/fp-api-shape-canary/lib/diff.mjs';
 import {
   pickCreatorIdFromSubscriptions,
+  listCreatorIdsFromSubscriptions,
   pickPostIdFromCreatorList,
   pickVideoAttachmentId,
   apiGetJson,
@@ -93,6 +94,18 @@ describe('id pickers', () => {
     assert.equal(
       pickCreatorIdFromSubscriptions([{ creator: { id: 'c1' } }]),
       'c1',
+    );
+    assert.equal(
+      pickCreatorIdFromSubscriptions([{ creator: 'c-string-id', plan: { creator: 'c2' } }]),
+      'c-string-id',
+    );
+    assert.deepEqual(
+      listCreatorIdsFromSubscriptions([
+        { creator: 'a' },
+        { creator: 'b' },
+        { creator: 'a' },
+      ]),
+      ['a', 'b'],
     );
     assert.equal(pickPostIdFromCreatorList([{ id: 'p1', title: 't' }]), 'p1');
     assert.equal(
