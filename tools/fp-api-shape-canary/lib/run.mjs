@@ -26,7 +26,8 @@ import {
   pickVideoAttachmentId,
   redactToken,
 } from './probe.mjs';
-import { loadBaselines, makeCaptureId, writeCapture } from './store.mjs';
+import { loadBaselines, makeCaptureId, writeCapture, writeSanitizedExamples } from './store.mjs';
+import { sanitizeEndpointExample } from './sanitize.mjs';
 
 /**
  * @typedef {{
@@ -155,6 +156,7 @@ export async function writeAuthFile(filePath, session) {
  *   unauthList?: boolean,
  *   unauthCreatorId?: string|null,
  *   promoteBaselines?: boolean,
+ *   writeExamples?: boolean,
  *   fetchImpl?: typeof fetch,
  *   now?: Date,
  *   dryRun?: boolean,
@@ -165,6 +167,8 @@ export async function runCapture(opts) {
   const captureId = makeCaptureId(now);
   /** @type {Record<string, object>} */
   const trees = {};
+  /** @type {Record<string, unknown>} */
+  const bodies = {};
   /** @type {object[]} */
   const calls = [];
   /** @type {string[]} */
@@ -172,6 +176,7 @@ export async function runCapture(opts) {
   /** @type {string[]} */
   const errors = [];
   const dpopKeyPair = opts.dpopKeyPair || null;
+  const keepBodies = Boolean(opts.writeExamples);
 
   let creatorId = opts.creatorId || null;
   let postId = opts.postId || null;
@@ -205,6 +210,7 @@ export async function runCapture(opts) {
     });
     if (result.ok && result.json != null) {
       trees[UNAUTH_LIST.id] = buildFieldTree(result.json);
+      if (keepBodies) bodies[UNAUTH_LIST.id] = result.json;
       if (!postId) postId = pickPostIdFromCreatorList(result.json);
     } else {
       errors.push(`unauth list HTTP ${result.status}`);
@@ -249,8 +255,10 @@ export async function runCapture(opts) {
         ok: result.ok,
         auth: result.authScheme,
       });
-      if (result.ok && result.json != null) trees[ep.id] = buildFieldTree(result.json);
-      else errors.push(`user-self HTTP ${result.status}`);
+      if (result.ok && result.json != null) {
+        trees[ep.id] = buildFieldTree(result.json);
+        if (keepBodies) bodies[ep.id] = result.json;
+      } else errors.push(`user-self HTTP ${result.status}`);
     }
 
     // 2) subscriptions → creator id(s)
@@ -269,6 +277,7 @@ export async function runCapture(opts) {
       });
       if (result.ok && result.json != null) {
         trees[ep.id] = buildFieldTree(result.json);
+        if (keepBodies) bodies[ep.id] = result.json;
         creatorIds = listCreatorIdsFromSubscriptions(result.json);
         if (creatorId && !creatorIds.includes(creatorId)) creatorIds.unshift(creatorId);
         if (!creatorId) creatorId = creatorIds[0] || null;
@@ -301,6 +310,7 @@ export async function runCapture(opts) {
         });
         if (result.ok && result.json != null) {
           trees[ep.id] = buildFieldTree(result.json);
+          if (keepBodies) bodies[ep.id] = result.json;
           const found = pickPostIdFromCreatorList(result.json);
           if (found) {
             creatorId = candidate;
@@ -333,6 +343,7 @@ export async function runCapture(opts) {
       });
       if (result.ok && result.json != null) {
         trees[ep.id] = buildFieldTree(result.json);
+        if (keepBodies) bodies[ep.id] = result.json;
         videoId = pickVideoAttachmentId(result.json);
       } else {
         errors.push(`content-post HTTP ${result.status}`);
@@ -355,8 +366,10 @@ export async function runCapture(opts) {
         query: { id: '(redacted)' },
         optional: true,
       });
-      if (result.ok && result.json != null) trees[ep.id] = buildFieldTree(result.json);
-      else notes.push(`optional content-video HTTP ${result.status}`);
+      if (result.ok && result.json != null) {
+        trees[ep.id] = buildFieldTree(result.json);
+        if (keepBodies) bodies[ep.id] = result.json;
+      } else notes.push(`optional content-video HTTP ${result.status}`);
     } else if (opts.includeOptionalVideo) {
       notes.push('optional content-video skipped (no video attachment id)');
     }
@@ -490,6 +503,26 @@ export async function runCapture(opts) {
 
   if (promote) notes.push(`Baselines promoted under baselines/ from ${captureId}`);
 
+  /** @type {{ examplesDir?: string, rawDir?: string, files?: string[] } | null} */
+  let examplesWrite = null;
+  if (keepBodies && Object.keys(bodies).length > 0) {
+    /** @type {Record<string, object>} */
+    const sanitizedDocs = {};
+    for (const [id, body] of Object.entries(bodies)) {
+      sanitizedDocs[id] = sanitizeEndpointExample(id, body);
+    }
+    examplesWrite = await writeSanitizedExamples({
+      artifactsRoot: opts.artifactsRoot,
+      captureId,
+      captureDir: dir,
+      rawBodies: bodies,
+      sanitizedDocs,
+    });
+    notes.push(
+      `Sanitized examples under examples/ (${Object.keys(sanitizedDocs).join(', ')}); raw under capture raw/ (gitignored)`,
+    );
+  }
+
   let exitCode = EXIT.SUCCESS;
   if (errors.length) exitCode = EXIT.FAILURE;
   else if (diff && diff.hasDrift && !diff.firstCapture) exitCode = EXIT.DRIFT;
@@ -498,6 +531,7 @@ export async function runCapture(opts) {
     exitCode,
     captureId,
     trees,
+    bodies: keepBodies ? bodies : undefined,
     calls,
     notes,
     errors,
@@ -505,6 +539,7 @@ export async function runCapture(opts) {
     reportMd,
     dir,
     meta,
+    examplesWrite,
   };
 }
 
