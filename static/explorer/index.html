@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="description" content="Browse and try Floatplane REST API endpoints from the trimmed OpenAPI spec.">
+	<title>Floatplane API Explorer</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+	<div class="atmosphere" aria-hidden="true"></div>
+
+	<header class="site-header">
+		<div class="brand-block">
+			<p class="brand-mark">Floatplane API</p>
+			<h1 class="brand-title">Explorer</h1>
+			<p class="brand-lede">Browse documented endpoints from the trimmed OpenAPI spec, shape a request, and copy a ready-to-run curl — without Swagger density.</p>
+		</div>
+		<div class="header-meta">
+			<p class="spec-status" id="spec-status">Loading trimmed OpenAPI…</p>
+			<a class="text-link" href="../index.html">All docs</a>
+		</div>
+	</header>
+
+	<section class="auth-bar" aria-label="Authentication">
+		<div class="auth-primary">
+			<p class="auth-heading">REST auth (Keycloak access token)</p>
+			<div class="auth-fields">
+				<label class="field field-token">
+					<span>Bearer access token</span>
+					<input id="auth-token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste Keycloak access token (stored only in this browser)">
+				</label>
+				<label class="field field-grow">
+					<span>Base URL</span>
+					<input id="base-url" type="url" spellcheck="false" value="https://www.floatplane.com">
+				</label>
+				<label class="field field-ua">
+					<span>User-Agent</span>
+					<input id="user-agent" type="text" spellcheck="false" value="FloatplaneAPI-Explorer/1.0">
+				</label>
+			</div>
+			<div class="auth-actions">
+				<button type="button" class="btn ghost" id="toggle-token-vis" aria-pressed="false">Show token</button>
+				<button type="button" class="btn ghost" id="clear-auth">Clear local auth</button>
+			</div>
+			<p class="auth-note">
+				Modern third-party REST clients use <code>Authorization: Bearer &lt;access_token&gt;</code> from Keycloak — not cookies.
+				Token stays in <code>localStorage</code> on this device — never commit it.
+				<strong>Copy curl</strong> is the reliable try path; live browser Send may still fail on CORS.
+			</p>
+			<p class="auth-note auth-note-gap" id="openapi-auth-gap">
+				OpenAPI in this repo still documents only <code>CookieAuth</code> (<code>sails.sid</code>). The explorer surfaces Bearer for REST try-it because current Floatplane clients send Bearer tokens; updating the OpenAPI security scheme is a separate docs task.
+			</p>
+		</div>
+
+		<details class="auth-secondary">
+			<summary>Chat / Socket.IO only — sails.sid cookie (legacy for REST)</summary>
+			<p class="auth-note">
+				<code>sails.sid</code> is still used for livestream chat / AsyncAPI Socket.IO authentication.
+				It is <strong>not</strong> the modern third-party REST auth path and is <strong>not</strong> attached to Explorer REST curl or Send.
+			</p>
+			<label class="field">
+				<span>sails.sid (chat only)</span>
+				<input id="auth-cookie" type="password" autocomplete="off" spellcheck="false" placeholder="Optional — for chat tooling reference only">
+			</label>
+			<div class="auth-actions">
+				<button type="button" class="btn ghost" id="toggle-cookie-vis" aria-pressed="false">Show cookie</button>
+			</div>
+		</details>
+	</section>
+
+	<main class="layout">
+		<aside class="browse-pane">
+			<div class="browse-controls">
+				<label class="search-field">
+					<span class="visually-hidden">Search endpoints</span>
+					<input id="search" type="search" placeholder="Search method, path, tag, summary…" autofocus>
+				</label>
+				<div class="tag-row" id="tag-filters" role="toolbar" aria-label="Filter by tag"></div>
+			</div>
+			<div class="endpoint-list" id="endpoint-list" role="listbox" aria-label="Endpoints"></div>
+		</aside>
+
+		<section class="detail-pane" id="detail-pane" aria-live="polite">
+			<div class="empty-detail" id="empty-detail">
+				<p class="empty-kicker">Select an endpoint</p>
+				<p>Pick a documented operation to inspect parameters, build a request, and copy curl.</p>
+			</div>
+			<article class="detail" id="detail" hidden>
+				<header class="detail-head">
+					<div class="method-path">
+						<span class="method-badge" id="detail-method"></span>
+						<code class="detail-path" id="detail-path"></code>
+					</div>
+					<p class="detail-summary" id="detail-summary"></p>
+					<p class="detail-tags" id="detail-tags"></p>
+				</header>
+
+				<div class="detail-grid">
+					<section class="panel">
+						<h2>About</h2>
+						<div class="prose" id="detail-description"></div>
+					</section>
+
+					<section class="panel">
+						<h2>Try it</h2>
+						<form id="try-form" class="try-form">
+							<div id="path-params" class="param-block"></div>
+							<div id="query-params" class="param-block"></div>
+							<div id="header-params" class="param-block"></div>
+							<label class="field body-field" id="body-field" hidden>
+								<span>JSON body</span>
+								<textarea id="request-body" rows="10" spellcheck="false"></textarea>
+							</label>
+							<div class="try-actions">
+								<button type="button" class="btn primary" id="copy-curl">Copy curl</button>
+								<button type="submit" class="btn secondary" id="send-request">Send request</button>
+							</div>
+							<p class="cors-callout" id="cors-callout">
+								REST try-it uses <code>Authorization: Bearer …</code> when a token is set.
+								Live Send from a static page to <code>www.floatplane.com</code> may still fail (CORS).
+								Use Copy curl in a terminal, or point Base URL at a local proxy if needed.
+							</p>
+						</form>
+					</section>
+
+					<section class="panel" id="response-panel" hidden>
+						<h2>Response</h2>
+						<div class="response-meta" id="response-meta"></div>
+						<pre class="response-body" id="response-body"></pre>
+					</section>
+				</div>
+			</article>
+		</section>
+	</main>
+
+	<footer class="site-footer">
+		<p>Source: trimmed OpenAPI from this repo. Undocumented TODO stubs are filtered out by <code>make trim</code>. REST auth in this explorer is Bearer (Keycloak); OpenAPI may still list CookieAuth until updated.</p>
+	</footer>
+
+	<script src="app.js" type="module"></script>
+</body>
+</html>

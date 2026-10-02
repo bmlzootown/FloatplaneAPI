@@ -37,6 +37,7 @@ ag -o FloatplaneChatAPI floatplane-asyncapi-chat-specification.json @asyncapi/no
 ## OpenAPI/AsyncAPI & Documentation Generation
 
 The API specifications can also be used to generate documentation. Pre-generated renders of the documentation for this repository are available at https://jamamp.github.io/FloatplaneAPIDocs. There are a variety of renders available, including:
+- **API Explorer** (this repo) — lighter browse + try-it / copy-curl UI over the trimmed OpenAPI (`static/explorer/`, generated into `Docs/Explorer/`)
 - Swagger UI - https://github.com/swagger-api/swagger-ui
 - Redoc - https://redoc.ly/redoc
 - ReSlate & Widdershins - https://github.com/Mermade/reslate - https://github.com/Mermade/widdershins
@@ -44,6 +45,18 @@ The API specifications can also be used to generate documentation. Pre-generated
 - OpenAPI Generator - https://openapi-generator.tech/
 - OpenAPI to Postman v2.1 Converter - https://github.com/postmanlabs/openapi-to-postman
 - AsyncAPI Generator - https://github.com/asyncapi/generator
+
+### API Explorer (browse + try-it)
+
+A static, human-oriented explorer for documented (trimmed) endpoints — search, tag filters, request builder, local **Bearer access token** storage for REST (`Authorization: Bearer …`), and **Copy curl**. `sails.sid` is chat/Socket.IO-only and is demoted in the UI. Live browser **Send** to `www.floatplane.com` may still be blocked by CORS; use curl or an optional local proxy base URL. OpenAPI may still list only `CookieAuth` — explorer REST auth is Bearer ahead of that docs lag.
+
+```sh
+make docs-explorer
+python3 -m http.server 8080 --directory Docs
+# open http://127.0.0.1:8080/Explorer/
+```
+
+Details: `static/explorer/README.md`.
 
 ### Example
 

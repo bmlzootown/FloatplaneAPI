@@ -7,7 +7,7 @@
 help:
 	@echo 'Available commands:'
 	@echo "clean validate test docs-all"
-	@echo "docs-trimmed docs-full docs-async"
+	@echo "docs-trimmed docs-full docs-async docs-explorer"
 	@echo "frontend-watch-test frontend-discover frontend-check frontend-check-json"
 	@echo "frontend-monitor frontend-monitor-json"
 	@echo "frontend-monitor-phase2 frontend-monitor-phase2-json"
@@ -139,7 +139,14 @@ docs-swaggerui: docs-skeleton validate-trimmed
 	mkdir -p Docs/SwaggerUI
 	cp static/SwaggerUI/* Docs/SwaggerUI
 	sed -i.bak -e 's/floatplane-openapi-specification.json/floatplane-openapi-specification-trimmed.json/g' Docs/SwaggerUI/index.html
-docs-trimmed: docs-oag-html2 docs-oag-dynamic-html docs-redoc docs-rapidoc docs-reslate docs-postman docs-swaggerui
+# Human-friendly static explorer (browse + try-it / copy-curl). Pure static; no monitoring impact.
+# Depends on trim only (not openapi-generator) so it stays easy to generate locally.
+# REST try-it uses Bearer (Keycloak access token); sails.sid is chat/Socket.IO-only in the UI.
+docs-explorer: docs-skeleton trim
+	mkdir -p Docs/Explorer
+	cp static/explorer/index.html static/explorer/styles.css static/explorer/app.js static/explorer/README.md Docs/Explorer/
+	cp src/floatplane-openapi-specification-trimmed.json Docs/Explorer/spec.json
+docs-trimmed: docs-oag-html2 docs-oag-dynamic-html docs-redoc docs-rapidoc docs-reslate docs-postman docs-swaggerui docs-explorer
 	@echo "docs-trimmed complete!"
 
 # Section: Full docs
