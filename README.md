@@ -149,7 +149,20 @@ Outputs land under `artifacts/frontend/{buildId}/{observationId}/phase2/` (`chun
 
 **Same-version-changed:** build id and bundle hashes are independent. Homepage HTML is archived under `_discovery/` but is **not** part of compared identity.
 
-**Not implemented yet (later phases):** API string extraction/classification, automatic OpenAPI/AsyncAPI edits, Hydravion impact analysis, fetching all lazy chunks.
+**Not implemented yet (later phases):** automatic OpenAPI/AsyncAPI edits, Hydravion impact analysis.
+
+### Authenticated API response-shape canary (Phase 3.0)
+
+Separate lane from the frontend watch: Keycloak **device-flow** login + fixed read-only allowlist centered on `GET /api/v3/content/post`, storing **field-tree** baselines (keys/types only) under `artifacts/api-shape/`. Does **not** change Phase 1/2 Automation schedule or `PROMPT.md`.
+
+```sh
+make api-shape-test                 # offline fixtures/mocks
+make api-shape-device-login         # human approves device code → state/api-shape-token.local
+make api-shape-capture              # requires FP_ACCESS_TOKEN or token file
+make api-shape-unauth-list           # companion; no secrets
+```
+
+OIDC defaults are evidence-backed (`auth.floatplane.com` / realm `floatplane` / clientId `fp-tv-app`). Never commit tokens. See `tools/fp-api-shape-canary/README.md`.
 
 ### Manual frontend fetch / diff (legacy helpers)
 

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "toolId": "fp-api-shape-canary",
+  "toolVersion": "3.0.0",
+  "captureId": "2026-10-02T15-36-02-527Z",
+  "capturedAt": "2026-10-02T15:36:02.527Z",
+  "allowlist": [
+    {
+      "id": "user-self",
+      "method": "GET",
+      "path": "/api/v3/user/self",
+      "optional": false
+    },
+    {
+      "id": "user-subscriptions",
+      "method": "GET",
+      "path": "/api/v3/user/subscriptions",
+      "optional": false
+    },
+    {
+      "id": "content-creator",
+      "method": "GET",
+      "path": "/api/v3/content/creator",
+      "optional": false
+    },
+    {
+      "id": "content-post",
+      "method": "GET",
+      "path": "/api/v3/content/post",
+      "optional": false
+    },
+    {
+      "id": "content-video",
+      "method": "GET",
+      "path": "/api/v3/content/video",
+      "optional": true
+    }
+  ],
+  "oidc": {
+    "issuer": "https://auth.floatplane.com/realms/floatplane",
+    "clientId": "fp-tv-app",
+    "realm": "floatplane",
+    "evidence": {
+      "clientIdSource": "artifacts/frontend/4.5.22-316-d74397b/.../js/index-BZVDPgzb.js — o_={baseUrl:\"https://auth.floatplane.com\",realm:\"floatplane\",clientId:\"fp-tv-app\",...}",
+      "deviceGrantSource": "OIDC discovery grant_types_supported includes urn:ietf:params:oauth:grant-type:device_code; device_authorization_endpoint present (observed 2026-10-02)"
+    }
+  },
+  "calls": [
+    {
+      "id": "content-creator-unauth",
+      "method": "GET",
+      "path": "/api/v3/content/creator",
+      "status": 200,
+      "ok": true,
+      "auth": "none"
+    }
+  ],
+  "notes": [
+    "No baselines yet — first capture; use --promote-baselines to seed baselines/"
+  ],
+  "errors": [],
+  "idsPresent": {
+    "creatorId": false,
+    "postId": true,
+    "videoId": false
+  },
+  "endpointIds": [
+    "content-creator-unauth"
+  ],
+  "promoteBaselines": true
+}

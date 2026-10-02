@@ -15,3 +15,8 @@
 /tests/frontend-evidence/.tmp-evidence/
 /tests/frontend-evidence-diff/.tmp-diff/
 /tests/frontend-phase2-orchestrate/.tmp-phase2-orch/
+/tests/api-shape-canary/.tmp-api-shape/
+
+# Phase 3.0 API shape canary — never commit tokens or raw bodies
+/state/api-shape-token.local
+/artifacts/api-shape/**/raw/
