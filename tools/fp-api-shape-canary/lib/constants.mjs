@@ -112,5 +112,7 @@ export const EXIT = Object.freeze({
 
 export const DEFAULT_ARTIFACTS_ROOT = 'artifacts/api-shape';
 export const DEFAULT_TOKEN_FILE = 'state/api-shape-token.local';
+/** Combined access token + DPoP key material (gitignored). Prefer over bare token file. */
+export const DEFAULT_AUTH_FILE = 'state/api-shape-auth.local.json';
 export const BASELINES_DIR = 'baselines';
 export const CAPTURES_DIR = 'captures';

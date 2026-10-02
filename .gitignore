@@ -19,4 +19,5 @@
 
 # Phase 3.0 API shape canary — never commit tokens or raw bodies
 /state/api-shape-token.local
+/state/api-shape-auth.local.json
 /artifacts/api-shape/**/raw/

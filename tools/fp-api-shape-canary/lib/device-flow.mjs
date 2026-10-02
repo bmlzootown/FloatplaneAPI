@@ -1,12 +1,14 @@
 /**
  * OIDC discovery + Keycloak device authorization grant helpers.
  *
- * Frontend TV client requires PKCE (USE_CODE_CHALLENGE): code_challenge_method=S256
- * on device authorization, and code_verifier on the token poll.
+ * Frontend TV client (fp-tv-app, usesExtendedSecurity):
+ * - PKCE S256 on device authorization + code_verifier on token poll
+ * - DPoP (ES256) proof on token poll (and later on REST calls)
  */
 
 import { createHash, randomBytes } from 'node:crypto';
 import { OIDC, USER_AGENT } from './constants.mjs';
+import { attachDpopHeaders, generateDpopKeyPair, readDpopNonce } from './dpop.mjs';
 
 /**
  * Generate a PKCE code_verifier (43–128 chars, unreserved).
@@ -121,11 +123,13 @@ export async function requestDeviceAuthorization(opts) {
 
 /**
  * Poll token endpoint until authorized, expired, or aborted.
+ * Always sends DPoP (fp-tv-app usesExtendedSecurity / USE_DPOP).
  * @param {{
  *   discovery: Awaited<ReturnType<typeof discoverOidc>>,
  *   deviceCode: string,
  *   clientId?: string,
  *   codeVerifier?: string,
+ *   dpopKeyPair?: Awaited<ReturnType<typeof generateDpopKeyPair>>,
  *   intervalSec?: number,
  *   expiresInSec?: number,
  *   fetchImpl?: typeof fetch,
@@ -140,9 +144,12 @@ export async function pollDeviceToken(opts) {
   const sleep = opts.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
   const now = opts.now || (() => Date.now());
   const clientId = opts.clientId || OIDC.clientId;
+  const dpopKeyPair = opts.dpopKeyPair || (await generateDpopKeyPair());
   let intervalMs = Math.max(1, (opts.intervalSec ?? 5) * 1000);
   const deadline = now() + Math.max(1, opts.expiresInSec ?? 600) * 1000;
   let attempt = 0;
+  /** @type {string|null} */
+  let dpopNonce = null;
 
   while (now() < deadline) {
     if (opts.signal?.aborted) {
@@ -155,15 +162,27 @@ export async function pollDeviceToken(opts) {
     body.set('client_id', clientId);
     if (opts.codeVerifier) body.set('code_verifier', opts.codeVerifier);
 
+    /** @type {Record<string, string>} */
+    const headers = {
+      'content-type': 'application/x-www-form-urlencoded',
+      accept: 'application/json',
+      'user-agent': USER_AGENT,
+    };
+    await attachDpopHeaders({
+      headers,
+      keyPair: dpopKeyPair,
+      method: 'POST',
+      url: opts.discovery.tokenEndpoint,
+      nonce: dpopNonce,
+    });
+
     const res = await fetchImpl(opts.discovery.tokenEndpoint, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        accept: 'application/json',
-        'user-agent': USER_AGENT,
-      },
+      headers,
       body,
     });
+    const nonceHeader = readDpopNonce(res);
+    if (nonceHeader) dpopNonce = nonceHeader;
     const json = await res.json().catch(() => ({}));
 
     if (res.ok && json.access_token) {
@@ -172,8 +191,9 @@ export async function pollDeviceToken(opts) {
         accessToken: json.access_token,
         refreshToken: json.refresh_token || null,
         expiresIn: json.expires_in ?? null,
-        tokenType: json.token_type || 'Bearer',
+        tokenType: json.token_type || 'DPoP',
         scope: json.scope || null,
+        dpopKeyPair,
       };
     }
 
@@ -189,8 +209,14 @@ export async function pollDeviceToken(opts) {
       await sleep(intervalMs);
       continue;
     }
+    // Keycloak may require a nonce retry without waiting the full interval
+    if (err === 'use_dpop_nonce' || (err === 'invalid_dpop_proof' && nonceHeader)) {
+      continue;
+    }
     if (err === 'expired_token' || err === 'access_denied') {
-      throw new Error(`device token poll ended: ${err}${json.error_description ? `: ${json.error_description}` : ''}`);
+      throw new Error(
+        `device token poll ended: ${err}${json.error_description ? `: ${json.error_description}` : ''}`,
+      );
     }
     throw new Error(
       `device token poll failed: ${err}${json.error_description ? `: ${json.error_description}` : ''}`,

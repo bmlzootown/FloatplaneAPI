@@ -1,8 +1,9 @@
 /**
- * Read-only allowlisted Floatplane REST probes (Bearer or unauthenticated).
+ * Read-only allowlisted Floatplane REST probes (DPoP-bound token or unauthenticated).
  */
 
 import { API_BASE_URL, USER_AGENT } from './constants.mjs';
+import { attachDpopHeaders, readDpopNonce } from './dpop.mjs';
 
 /**
  * @param {{
@@ -10,6 +11,7 @@ import { API_BASE_URL, USER_AGENT } from './constants.mjs';
  *   path: string,
  *   query?: Record<string, string | number | undefined | null>,
  *   accessToken?: string | null,
+ *   dpopKeyPair?: { publicJwk: object, privateKey: CryptoKey } | null,
  *   fetchImpl?: typeof fetch,
  *   baseUrl?: string,
  * }} opts
@@ -25,32 +27,72 @@ export async function apiGetJson(opts) {
     full.searchParams.set(k, String(v));
   }
 
-  /** @type {Record<string, string>} */
-  const headers = {
-    accept: 'application/json',
-    'user-agent': USER_AGENT,
-  };
-  if (opts.accessToken) {
-    headers.authorization = `Bearer ${opts.accessToken}`;
+  /** @type {string|null} */
+  let dpopNonce = null;
+  const method = opts.method || 'GET';
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    /** @type {Record<string, string>} */
+    const headers = {
+      accept: 'application/json',
+      'user-agent': USER_AGENT,
+    };
+
+    if (opts.accessToken && opts.dpopKeyPair) {
+      await attachDpopHeaders({
+        headers,
+        keyPair: opts.dpopKeyPair,
+        method,
+        url: full,
+        accessToken: opts.accessToken,
+        nonce: dpopNonce,
+      });
+    } else if (opts.accessToken) {
+      // Fallback Bearer (legacy / tests without DPoP). Live fp-tv-app tokens need DPoP.
+      headers.authorization = `Bearer ${opts.accessToken}`;
+    }
+
+    const res = await fetchImpl(full.toString(), {
+      method,
+      headers,
+    });
+    const nonceHeader = readDpopNonce(res);
+    if (nonceHeader) dpopNonce = nonceHeader;
+
+    const text = await res.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+
+    const err = json && typeof json === 'object' ? json.error : null;
+    if (
+      !res.ok &&
+      opts.dpopKeyPair &&
+      (err === 'use_dpop_nonce' || (err === 'invalid_dpop_proof' && nonceHeader))
+    ) {
+      continue;
+    }
+
+    return {
+      ok: res.ok,
+      status: res.status,
+      url: full.toString(),
+      json,
+      rawTextLength: text.length,
+      authScheme: opts.accessToken ? (opts.dpopKeyPair ? 'DPoP' : 'Bearer') : 'none',
+    };
   }
 
-  const res = await fetchImpl(full.toString(), {
-    method: opts.method || 'GET',
-    headers,
-  });
-  const text = await res.text();
-  let json = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = null;
-  }
   return {
-    ok: res.ok,
-    status: res.status,
+    ok: false,
+    status: 0,
     url: full.toString(),
-    json,
-    rawTextLength: text.length,
+    json: { error: 'dpop_retry_exhausted' },
+    rawTextLength: 0,
+    authScheme: 'DPoP',
   };
 }
 

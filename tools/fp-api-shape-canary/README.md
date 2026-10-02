@@ -18,17 +18,18 @@ Evidence-backed public OIDC defaults (do not invent clients):
 | clientId | `fp-tv-app` | Frontend entry JS `clientId:"fp-tv-app"` |
 | Device grant | `urn:ietf:params:oauth:grant-type:device_code` | Discovery `grant_types_supported` |
 | PKCE | S256 (`code_challenge` + `code_verifier`) | Frontend `USE_CODE_CHALLENGE`; Keycloak requires it |
+| DPoP | ES256 proof on token + REST | Frontend `USE_DPOP` / `usesExtendedSecurity:!0` |
 
-REST probes use `Authorization: Bearer <access_token>`. Never commit tokens.
-Default token file `state/api-shape-token.local` is gitignored.
+REST probes use DPoP-bound access tokens (`Authorization: DPoP …` + `DPoP` proof).
+Never commit secrets. Default auth file `state/api-shape-auth.local.json` is gitignored
+(includes access token + DPoP private JWK). Bare `state/api-shape-token.local` alone is
+not enough for live `fp-tv-app` APIs.
 
 ```sh
 # Human approves the device code in a browser
 make api-shape-device-login
-# → writes state/api-shape-token.local (0600)
+# → writes state/api-shape-auth.local.json (0600)
 
-# Or export a short-lived token without writing a file
-export FP_ACCESS_TOKEN='…'
 make api-shape-capture
 ```
 

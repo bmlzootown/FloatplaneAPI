@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import {
   DEFAULT_ARTIFACTS_ROOT,
+  DEFAULT_AUTH_FILE,
   DEFAULT_TOKEN_FILE,
   EXIT,
   OIDC,
@@ -29,8 +30,14 @@ import {
   TOOL_VERSION,
 } from './lib/constants.mjs';
 import { discoverOidc, requestDeviceAuthorization, pollDeviceToken } from './lib/device-flow.mjs';
+import { generateDpopKeyPair } from './lib/dpop.mjs';
 import { diffFieldTrees, formatDiffReportMarkdown } from './lib/diff.mjs';
-import { resolveAccessToken, runCapture, writeTokenFile } from './lib/run.mjs';
+import {
+  resolveAuthSession,
+  runCapture,
+  writeAuthFile,
+  writeTokenFile,
+} from './lib/run.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -91,12 +98,23 @@ async function cmdDeviceLogin(args) {
   console.error(`OIDC issuer: ${discovery.issuer}`);
   console.error(`client_id: ${args.clientId || OIDC.clientId} (frontend evidence: fp-tv-app)`);
   console.error(`scope: ${args.scope || OIDC.defaultScope}`);
+  console.error('security: PKCE S256 + DPoP ES256 (usesExtendedSecurity)');
 
   const started = await requestDeviceAuthorization({
     discovery,
     clientId: args.clientId || OIDC.clientId,
     scope: args.scope || OIDC.defaultScope,
   });
+
+  // Emit a single machine-parseable line early so operators/agents can request approval ASAP.
+  console.log(
+    `DEVICE_LOGIN_PENDING ${JSON.stringify({
+      userCode: started.userCode,
+      verificationUri: started.verificationUri,
+      verificationUriComplete: started.verificationUriComplete,
+      expiresIn: started.expiresIn,
+    })}`,
+  );
 
   console.error('');
   console.error('=== Device login (human approval required) ===');
@@ -127,11 +145,13 @@ async function cmdDeviceLogin(args) {
     process.exit(EXIT.NEEDS_AUTH);
   }
 
+  const dpopKeyPair = await generateDpopKeyPair();
   const token = await pollDeviceToken({
     discovery,
     deviceCode: started.deviceCode,
     clientId: args.clientId || OIDC.clientId,
     codeVerifier: started.codeVerifier,
+    dpopKeyPair,
     intervalSec: started.interval,
     expiresInSec: started.expiresIn,
     onPoll: (info) => {
@@ -141,26 +161,33 @@ async function cmdDeviceLogin(args) {
     },
   });
 
+  const authFile = path.resolve(REPO_ROOT, args.authFile || DEFAULT_AUTH_FILE);
+  await writeAuthFile(authFile, {
+    accessToken: token.accessToken,
+    refreshToken: token.refreshToken,
+    expiresIn: token.expiresIn,
+    scope: token.scope,
+    dpopKeyPair: token.dpopKeyPair,
+  });
   const tokenFile = path.resolve(REPO_ROOT, args.tokenFile || DEFAULT_TOKEN_FILE);
   await writeTokenFile(tokenFile, token.accessToken);
-  console.error(`Access token written to ${tokenFile} (gitignored; mode 0600).`);
-  console.error('Do NOT commit this file. Prefer FP_ACCESS_TOKEN env for CI/agents.');
-  if (token.refreshToken) {
-    console.error('Refresh token was returned by IdP but is NOT written to disk by default.');
-  }
+  console.error(`Auth session written to ${authFile} (gitignored; mode 0600; includes DPoP keys).`);
+  console.error(`Access token also at ${tokenFile} (gitignored; alone is insufficient for live DPoP APIs).`);
+  console.error('Do NOT commit these files.');
   console.error('');
   console.error('Next: make api-shape-capture');
-  console.error('   or: FP_ACCESS_TOKEN=… make api-shape-capture');
 
   if (args.json) {
     console.log(
       JSON.stringify(
         {
           ok: true,
+          authFile,
           tokenFile,
           expiresIn: token.expiresIn,
           scope: token.scope,
           hasRefreshToken: Boolean(token.refreshToken),
+          dpop: true,
         },
         null,
         2,
@@ -176,14 +203,19 @@ async function cmdCapture(args) {
   const tokenFile = args.tokenFile
     ? path.resolve(REPO_ROOT, args.tokenFile)
     : path.resolve(REPO_ROOT, DEFAULT_TOKEN_FILE);
-  const accessToken = await resolveAccessToken({
+  const authFile = args.authFile
+    ? path.resolve(REPO_ROOT, args.authFile)
+    : path.resolve(REPO_ROOT, DEFAULT_AUTH_FILE);
+  const session = await resolveAuthSession({
     token: args.token || null,
     tokenFile,
+    authFile,
   });
 
   const result = await runCapture({
     artifactsRoot,
-    accessToken,
+    accessToken: session?.accessToken || null,
+    dpopKeyPair: session?.dpopKeyPair || null,
     creatorId: args.creatorId || null,
     postId: args.postId || null,
     includeOptionalVideo: Boolean(args.includeVideo),
@@ -296,6 +328,7 @@ Commands:
 
 Options:
   --token-file <path>     Default: ${DEFAULT_TOKEN_FILE} (gitignored)
+  --auth-file <path>      Default: ${DEFAULT_AUTH_FILE} (gitignored; token+DPoP JWKs)
   --token <accessToken>   Prefer env FP_ACCESS_TOKEN instead (never commit)
   --artifacts <dir>       Default: ${DEFAULT_ARTIFACTS_ROOT}
   --creator-id <id>       Override subscribed creator for list probe
@@ -312,10 +345,12 @@ Options:
   --help
 
 Env:
-  FP_ACCESS_TOKEN         Bearer access token (preferred for agents/CI)
-  FP_TOKEN_FILE           Override token file path
+  FP_AUTH_FILE            Auth session JSON (access token + DPoP keys)
+  FP_ACCESS_TOKEN         Access token only (needs matching DPoP keys for live APIs)
+  FP_TOKEN_FILE           Override bare token file path
 
 Evidence-backed OIDC defaults: issuer ${OIDC.issuer}, clientId ${OIDC.clientId}.
+fp-tv-app requires PKCE + DPoP (usesExtendedSecurity).
 Non-goals: no OpenAPI edits, no Phase 1/2 schedule changes, no Hydravion, no writes.
 `);
 }
@@ -333,6 +368,7 @@ function parseArgs(argv) {
     promoteBaselines: false,
     token: null,
     tokenFile: null,
+    authFile: null,
     artifacts: null,
     creatorId: null,
     postId: null,
@@ -357,6 +393,7 @@ function parseArgs(argv) {
     else if (a === '--promote-baselines') args.promoteBaselines = true;
     else if (a === '--token') args.token = rest.shift();
     else if (a === '--token-file') args.tokenFile = rest.shift();
+    else if (a === '--auth-file') args.authFile = rest.shift();
     else if (a === '--artifacts') args.artifacts = rest.shift();
     else if (a === '--creator-id') args.creatorId = rest.shift();
     else if (a === '--post-id') args.postId = rest.shift();

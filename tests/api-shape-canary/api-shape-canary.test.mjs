@@ -134,12 +134,13 @@ describe('device-flow (mocked)', () => {
         pollCount += 1;
         const body = String(init.body);
         assert.ok(body.includes('code_verifier='));
+        assert.ok(init.headers.dpop || init.headers.DPoP, 'DPoP header required');
         if (pollCount < 2) {
           return jsonResponse({ error: 'authorization_pending' }, 400);
         }
         return jsonResponse({
           access_token: 'access-token-value',
-          token_type: 'Bearer',
+          token_type: 'DPoP',
           expires_in: 300,
         });
       }

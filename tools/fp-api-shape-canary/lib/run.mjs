@@ -6,6 +6,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import {
   ALLOWLIST,
+  DEFAULT_AUTH_FILE,
   EXIT,
   OIDC,
   OIDC_EVIDENCE,
@@ -16,6 +17,7 @@ import {
 } from './constants.mjs';
 import { buildFieldTree } from './field-tree.mjs';
 import { diffBaselineMaps, formatDiffReportMarkdown } from './diff.mjs';
+import { importDpopKeyPair } from './dpop.mjs';
 import {
   apiGetJson,
   pickCreatorIdFromSubscriptions,
@@ -26,23 +28,79 @@ import {
 import { loadBaselines, makeCaptureId, writeCapture } from './store.mjs';
 
 /**
- * Resolve access token from env / file. Never invent tokens.
- * @param {{ token?: string|null, tokenFile?: string|null, env?: NodeJS.ProcessEnv }} opts
+ * @typedef {{
+ *   accessToken: string,
+ *   dpopKeyPair: Awaited<ReturnType<typeof importDpopKeyPair>> | null,
+ *   authFile?: string | null,
+ * }} AuthSession
  */
-export async function resolveAccessToken(opts = {}) {
+
+/**
+ * Resolve access token + optional DPoP keys. Never invent tokens.
+ * Prefers FP_ACCESS_TOKEN / --token, then auth JSON file, then bare token file.
+ * @param {{
+ *   token?: string|null,
+ *   tokenFile?: string|null,
+ *   authFile?: string|null,
+ *   dpopKeyPair?: AuthSession['dpopKeyPair'],
+ *   env?: NodeJS.ProcessEnv,
+ * }} opts
+ * @returns {Promise<AuthSession|null>}
+ */
+export async function resolveAuthSession(opts = {}) {
   const env = opts.env || process.env;
-  if (opts.token) return opts.token;
-  if (env.FP_ACCESS_TOKEN) return env.FP_ACCESS_TOKEN;
+  if (opts.dpopKeyPair && (opts.token || env.FP_ACCESS_TOKEN)) {
+    return {
+      accessToken: opts.token || env.FP_ACCESS_TOKEN,
+      dpopKeyPair: opts.dpopKeyPair,
+    };
+  }
+
+  const authFile = opts.authFile || env.FP_AUTH_FILE || null;
+  if (authFile) {
+    try {
+      const raw = await readFile(authFile, 'utf8');
+      const doc = JSON.parse(raw);
+      if (doc.accessToken && doc.dpop?.publicJwk && doc.dpop?.privateJwk) {
+        const dpopKeyPair = await importDpopKeyPair({
+          publicJwk: doc.dpop.publicJwk,
+          privateJwk: doc.dpop.privateJwk,
+        });
+        return { accessToken: doc.accessToken, dpopKeyPair, authFile };
+      }
+      if (doc.accessToken) {
+        return { accessToken: doc.accessToken, dpopKeyPair: null, authFile };
+      }
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') throw err;
+    }
+  }
+
+  if (opts.token) return { accessToken: opts.token, dpopKeyPair: opts.dpopKeyPair || null };
+  if (env.FP_ACCESS_TOKEN) {
+    return { accessToken: env.FP_ACCESS_TOKEN, dpopKeyPair: opts.dpopKeyPair || null };
+  }
+
   const file = opts.tokenFile || env.FP_TOKEN_FILE;
   if (!file) return null;
   try {
     const raw = await readFile(file, 'utf8');
     const token = raw.trim();
-    return token || null;
+    if (!token) return null;
+    return { accessToken: token, dpopKeyPair: opts.dpopKeyPair || null };
   } catch (err) {
     if (err && err.code === 'ENOENT') return null;
     throw err;
   }
+}
+
+/**
+ * Resolve access token from env / file. Never invent tokens.
+ * @param {{ token?: string|null, tokenFile?: string|null, authFile?: string|null, env?: NodeJS.ProcessEnv }} opts
+ */
+export async function resolveAccessToken(opts = {}) {
+  const session = await resolveAuthSession(opts);
+  return session?.accessToken || null;
 }
 
 /**
@@ -56,9 +114,40 @@ export async function writeTokenFile(filePath, accessToken) {
 }
 
 /**
+ * Persist access token + DPoP JWKs (required for fp-tv-app resource calls).
+ * @param {string} filePath
+ * @param {{
+ *   accessToken: string,
+ *   refreshToken?: string|null,
+ *   expiresIn?: number|null,
+ *   scope?: string|null,
+ *   dpopKeyPair: { publicJwk: object, privateJwk: object },
+ * }} session
+ */
+export async function writeAuthFile(filePath, session) {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const doc = {
+    schemaVersion: 1,
+    writtenAt: new Date().toISOString(),
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken || null,
+    expiresIn: session.expiresIn ?? null,
+    scope: session.scope || null,
+    tokenType: 'DPoP',
+    dpop: {
+      publicJwk: session.dpopKeyPair.publicJwk,
+      privateJwk: session.dpopKeyPair.privateJwk,
+    },
+    warning: 'SECRET — do not commit. Gitignored as *.local / api-shape-auth.local.json',
+  };
+  await writeFile(filePath, `${JSON.stringify(doc, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+}
+
+/**
  * @param {{
  *   artifactsRoot: string,
  *   accessToken?: string|null,
+ *   dpopKeyPair?: AuthSession['dpopKeyPair'],
  *   creatorId?: string|null,
  *   postId?: string|null,
  *   includeOptionalVideo?: boolean,
@@ -81,10 +170,21 @@ export async function runCapture(opts) {
   const notes = [];
   /** @type {string[]} */
   const errors = [];
+  const dpopKeyPair = opts.dpopKeyPair || null;
 
   let creatorId = opts.creatorId || null;
   let postId = opts.postId || null;
   let videoId = null;
+
+  /** @param {Parameters<typeof apiGetJson>[0]} partial */
+  async function getJson(partial) {
+    return apiGetJson({
+      ...partial,
+      accessToken: opts.accessToken,
+      dpopKeyPair,
+      fetchImpl: opts.fetchImpl,
+    });
+  }
 
   if (opts.unauthList) {
     const creator = opts.unauthCreatorId || UNAUTH_LIST.defaultCreatorId;
@@ -117,7 +217,7 @@ export async function runCapture(opts) {
       trees,
       calls,
       notes: [
-        'No access token. Run: make api-shape-device-login (human approves device code), then set FP_ACCESS_TOKEN or state/api-shape-token.local',
+        'No access token. Run: make api-shape-device-login (human approves device code), then set FP_ACCESS_TOKEN or state/api-shape-auth.local.json',
       ],
       errors: ['missing access token'],
       diff: null,
@@ -127,17 +227,27 @@ export async function runCapture(opts) {
   }
 
   if (opts.accessToken) {
-    notes.push(`Bearer present (${redactToken(opts.accessToken)})`);
+    notes.push(
+      `Token present (${redactToken(opts.accessToken)}); auth=${dpopKeyPair ? 'DPoP' : 'Bearer-fallback'}`,
+    );
+    if (!dpopKeyPair) {
+      notes.push(
+        'No DPoP key pair loaded — live fp-tv-app tokens usually require DPoP. Prefer state/api-shape-auth.local.json from device-login.',
+      );
+    }
 
     // 1) user/self
     {
       const ep = ALLOWLIST.find((e) => e.id === 'user-self');
-      const result = await apiGetJson({
+      const result = await getJson({ path: ep.path });
+      calls.push({
+        id: ep.id,
+        method: 'GET',
         path: ep.path,
-        accessToken: opts.accessToken,
-        fetchImpl: opts.fetchImpl,
+        status: result.status,
+        ok: result.ok,
+        auth: result.authScheme,
       });
-      calls.push({ id: ep.id, method: 'GET', path: ep.path, status: result.status, ok: result.ok, auth: 'bearer' });
       if (result.ok && result.json != null) trees[ep.id] = buildFieldTree(result.json);
       else errors.push(`user-self HTTP ${result.status}`);
     }
@@ -145,18 +255,14 @@ export async function runCapture(opts) {
     // 2) subscriptions → creator id
     {
       const ep = ALLOWLIST.find((e) => e.id === 'user-subscriptions');
-      const result = await apiGetJson({
-        path: ep.path,
-        accessToken: opts.accessToken,
-        fetchImpl: opts.fetchImpl,
-      });
+      const result = await getJson({ path: ep.path });
       calls.push({
         id: ep.id,
         method: 'GET',
         path: ep.path,
         status: result.status,
         ok: result.ok,
-        auth: 'bearer',
+        auth: result.authScheme,
       });
       if (result.ok && result.json != null) {
         trees[ep.id] = buildFieldTree(result.json);
@@ -169,13 +275,10 @@ export async function runCapture(opts) {
     if (!creatorId) {
       notes.push('No creatorId from subscriptions; pass --creator-id to continue list/post probe');
     } else {
-      // 3) content/creator?limit=1
       const ep = ALLOWLIST.find((e) => e.id === 'content-creator');
-      const result = await apiGetJson({
+      const result = await getJson({
         path: ep.path,
         query: { id: creatorId, limit: 1 },
-        accessToken: opts.accessToken,
-        fetchImpl: opts.fetchImpl,
       });
       calls.push({
         id: ep.id,
@@ -183,7 +286,7 @@ export async function runCapture(opts) {
         path: ep.path,
         status: result.status,
         ok: result.ok,
-        auth: 'bearer',
+        auth: result.authScheme,
         query: { id: '(redacted)', limit: 1 },
       });
       if (result.ok && result.json != null) {
@@ -197,13 +300,10 @@ export async function runCapture(opts) {
     if (!postId) {
       notes.push('No postId available; pass --post-id for primary canary GET /api/v3/content/post');
     } else {
-      // 4) content/post — primary
       const ep = ALLOWLIST.find((e) => e.id === 'content-post');
-      const result = await apiGetJson({
+      const result = await getJson({
         path: ep.path,
         query: { id: postId },
-        accessToken: opts.accessToken,
-        fetchImpl: opts.fetchImpl,
       });
       calls.push({
         id: ep.id,
@@ -211,7 +311,7 @@ export async function runCapture(opts) {
         path: ep.path,
         status: result.status,
         ok: result.ok,
-        auth: 'bearer',
+        auth: result.authScheme,
         query: { id: '(redacted)' },
       });
       if (result.ok && result.json != null) {
@@ -224,11 +324,9 @@ export async function runCapture(opts) {
 
     if (opts.includeOptionalVideo && videoId) {
       const ep = ALLOWLIST.find((e) => e.id === 'content-video');
-      const result = await apiGetJson({
+      const result = await getJson({
         path: ep.path,
         query: { id: videoId },
-        accessToken: opts.accessToken,
-        fetchImpl: opts.fetchImpl,
       });
       calls.push({
         id: ep.id,
@@ -236,7 +334,7 @@ export async function runCapture(opts) {
         path: ep.path,
         status: result.status,
         ok: result.ok,
-        auth: 'bearer',
+        auth: result.authScheme,
         query: { id: '(redacted)' },
         optional: true,
       });
@@ -257,7 +355,6 @@ export async function runCapture(opts) {
     Object.keys(trees).length > 0
       ? {
           ...diffBaselineMaps(hasAnyBaseline ? comparable : {}, trees),
-          // When no baselines exist, treat as first capture (no drift alarm)
           firstCapture: !hasAnyBaseline,
         }
       : null;
@@ -292,12 +389,18 @@ export async function runCapture(opts) {
     toolVersion: TOOL_VERSION,
     captureId,
     capturedAt: now.toISOString(),
-    allowlist: ALLOWLIST.map((e) => ({ id: e.id, method: e.method, path: e.path, optional: !!e.optional })),
+    allowlist: ALLOWLIST.map((e) => ({
+      id: e.id,
+      method: e.method,
+      path: e.path,
+      optional: !!e.optional,
+    })),
     oidc: {
       issuer: OIDC.issuer,
       clientId: OIDC.clientId,
       realm: OIDC.realm,
       evidence: OIDC_EVIDENCE,
+      dpop: Boolean(dpopKeyPair),
     },
     calls,
     notes,
@@ -343,7 +446,8 @@ export async function runCapture(opts) {
 
   const promote =
     opts.promoteBaselines ||
-    (!hasAnyBaseline && Object.keys(trees).includes('content-post'));
+    (!hasAnyBaseline && Object.keys(trees).includes('content-post')) ||
+    (Object.keys(trees).includes('content-post') && !baselines['content-post']);
 
   const { dir } = await writeCapture({
     artifactsRoot: opts.artifactsRoot,
@@ -374,3 +478,5 @@ export async function runCapture(opts) {
     meta,
   };
 }
+
+export { DEFAULT_AUTH_FILE };
