@@ -38,6 +38,7 @@ import {
   writeAuthFile,
   writeTokenFile,
 } from './lib/run.mjs';
+import { applyExamplesToOpenApi } from './lib/apply-examples.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -64,6 +65,10 @@ async function main(argv) {
     }
     if (args.command === 'diff-trees') {
       await cmdDiffTrees(args);
+      return;
+    }
+    if (args.command === 'apply-examples') {
+      await cmdApplyExamples(args);
       return;
     }
     console.error(`Unknown command: ${args.command}`);
@@ -222,6 +227,7 @@ async function cmdCapture(args) {
     unauthList: Boolean(args.withUnauthList),
     unauthCreatorId: args.unauthCreatorId || null,
     promoteBaselines: Boolean(args.promoteBaselines),
+    writeExamples: Boolean(args.writeExamples),
     dryRun: Boolean(args.dryRun),
   });
 
@@ -317,6 +323,28 @@ async function cmdDiffTrees(args) {
   process.exit(d.hasDrift ? EXIT.DRIFT : EXIT.SUCCESS);
 }
 
+/** @param {ReturnType<typeof parseArgs>} args */
+async function cmdApplyExamples(args) {
+  const artifactsRoot = path.resolve(REPO_ROOT, args.artifacts || DEFAULT_ARTIFACTS_ROOT);
+  const examplesDir = path.join(artifactsRoot, 'examples');
+  const openapiPath = path.resolve(
+    REPO_ROOT,
+    args.openapi || 'src/floatplane-openapi-specification.json',
+  );
+  const result = await applyExamplesToOpenApi({
+    openapiPath,
+    examplesDir,
+  });
+  if (args.json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(`apply-examples → ${result.openapiPath}`);
+    console.log(`applied: ${result.applied.join(', ') || '(none)'}`);
+    for (const s of result.skipped) console.log(`skipped: ${s}`);
+  }
+  process.exit(result.applied.length ? EXIT.SUCCESS : EXIT.FAILURE);
+}
+
 function printHelp() {
   console.log(`Usage: node tools/fp-api-shape-canary/cli.mjs <command> [options]
 
@@ -325,6 +353,7 @@ Commands:
   capture          Authenticated allowlist capture → field trees + baseline diff
   unauth-list      Unauthenticated companion capture for /api/v3/content/creator
   diff-trees       Offline structural diff of two field-tree schema files
+  apply-examples   Wire sanitized artifacts/api-shape/examples/*.json into OpenAPI
 
 Options:
   --token-file <path>     Default: ${DEFAULT_TOKEN_FILE} (gitignored)
@@ -335,7 +364,9 @@ Options:
   --post-id <id>          Override post id for primary canary
   --include-video         Also GET /api/v3/content/video when attachment present
   --with-unauth-list      During capture, also snapshot unauth creator list
+  --write-examples        Also write gitignored raw + sanitized examples/ fixtures
   --promote-baselines     Force-write baselines/ from this capture
+  --openapi <path>        apply-examples OpenAPI path (default: src/…specification.json)
   --scope <scopes>        Device-login scope (default: ${OIDC.defaultScope})
   --client-id <id>        Default: ${OIDC.clientId} (do not invent clients)
   --no-poll               device-login: print user code and exit (needs auth)
@@ -351,7 +382,7 @@ Env:
 
 Evidence-backed OIDC defaults: issuer ${OIDC.issuer}, clientId ${OIDC.clientId}.
 fp-tv-app requires PKCE + DPoP (usesExtendedSecurity).
-Non-goals: no OpenAPI edits, no Phase 1/2 schedule changes, no Hydravion, no writes.
+Non-goals: no Phase 1/2 schedule changes, no Hydravion, no writes.
 `);
 }
 
@@ -366,10 +397,12 @@ function parseArgs(argv) {
     includeVideo: false,
     withUnauthList: false,
     promoteBaselines: false,
+    writeExamples: false,
     token: null,
     tokenFile: null,
     authFile: null,
     artifacts: null,
+    openapi: null,
     creatorId: null,
     postId: null,
     unauthCreatorId: null,
@@ -391,10 +424,12 @@ function parseArgs(argv) {
     else if (a === '--include-video') args.includeVideo = true;
     else if (a === '--with-unauth-list') args.withUnauthList = true;
     else if (a === '--promote-baselines') args.promoteBaselines = true;
+    else if (a === '--write-examples') args.writeExamples = true;
     else if (a === '--token') args.token = rest.shift();
     else if (a === '--token-file') args.tokenFile = rest.shift();
     else if (a === '--auth-file') args.authFile = rest.shift();
     else if (a === '--artifacts') args.artifacts = rest.shift();
+    else if (a === '--openapi') args.openapi = rest.shift();
     else if (a === '--creator-id') args.creatorId = rest.shift();
     else if (a === '--post-id') args.postId = rest.shift();
     else if (a === '--unauth-creator-id') args.unauthCreatorId = rest.shift();

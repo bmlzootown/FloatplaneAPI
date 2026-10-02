@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "toolId": "fp-api-shape-canary",
+  "toolVersion": "3.0.0",
+  "endpointId": "content-video",
+  "label": "observed",
+  "captureId": "2026-10-02T16-23-27-366Z",
+  "tree": {
+    "type": "object",
+    "properties": {
+      "blogPosts": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "lengthObserved": 1
+      },
+      "creator": {
+        "type": "string"
+      },
+      "description": {
+        "type": "string"
+      },
+      "dislikes": {
+        "type": "number"
+      },
+      "duration": {
+        "type": "number"
+      },
+      "guid": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "isAccessible": {
+        "type": "boolean"
+      },
+      "isProcessing": {
+        "type": "boolean"
+      },
+      "levels": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "height": {
+              "type": "number"
+            },
+            "label": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "order": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number"
+            }
+          }
+        },
+        "lengthObserved": 5
+      },
+      "likes": {
+        "type": "number"
+      },
+      "primaryBlogPost": {
+        "type": "string"
+      },
+      "releaseDate": {
+        "type": "null"
+      },
+      "score": {
+        "type": "number"
+      },
+      "selfUserInteraction": {
+        "type": "null"
+      },
+      "textTracks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "generated": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "language": {
+              "type": "string"
+            },
+            "processing": {
+              "type": "boolean"
+            },
+            "src": {
+              "type": "string"
+            }
+          }
+        },
+        "lengthObserved": 1
+      },
+      "thumbnail": {
+        "type": "object",
+        "properties": {
+          "childImages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "height": {
+                  "type": "number"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "width": {
+                  "type": "number"
+                }
+              }
+            },
+            "lengthObserved": 3
+          },
+          "height": {
+            "type": "number"
+          },
+          "path": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          }
+        }
+      },
+      "timelineSprite": {
+        "type": "object",
+        "properties": {
+          "childImages": {
+            "type": "array",
+            "items": {
+              "type": "unknown"
+            },
+            "lengthObserved": 0
+          },
+          "height": {
+            "type": "number"
+          },
+          "path": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          }
+        }
+      },
+      "title": {
+        "type": "string"
+      },
+      "type": {
+        "type": "string"
+      },
+      "userInteraction": {
+        "type": "array",
+        "items": {
+          "type": "unknown"
+        },
+        "lengthObserved": 0
+      }
+    }
+  }
+}

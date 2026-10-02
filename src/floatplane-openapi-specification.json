@@ -14077,25 +14077,29 @@
 								},
 								"example": [
 									{
-										"startDate": "2020-09-25T07:35:04.273Z",
-										"endDate": "2021-09-25T07:35:04.273Z",
-										"paymentID": 12345,
-										"interval": "year",
-										"paymentCancelled": false,
+										"startDate": "2025-07-07T23:02:07.673Z",
+										"endDate": "2033-10-07T23:02:07.673Z",
+										"paymentID": null,
+										"interval": "external",
+										"paymentCancelled": null,
 										"plan": {
-											"id": "5d48d0306825b5780db93d07",
-											"title": "LTT Supporter (1080p)",
-											"description": "Includes:\n- Early access (when possible)\n- Live Streaming\n- Behind-the-scenes, cutting room floor & exclusives\n\nNOTE: Tech Quickie and TechLinked are included for now, but will move to their own Floatplane pages in the future",
+											"id": "000000000000000000000000",
+											"title": "Example title (redacted)",
+											"description": "Example description (redacted).",
 											"price": "5.00",
 											"priceYearly": "50.00",
 											"currency": "usd",
+											"creator": "000000000000000000000000",
 											"logo": null,
-											"featured": true,
+											"featured": false,
 											"allowGrandfatheredAccess": false,
 											"discordServers": [],
-											"discordRoles": []
+											"discordRoles": [],
+											"enabled": true,
+											"published": true,
+											"enabledGlobal": true
 										},
-										"creator": "59f94c0bdd241b70349eb72b"
+										"creator": "000000000000000000000000"
 									}
 								]
 							}
@@ -15619,29 +15623,38 @@
 									"$ref": "#/components/schemas/UserSelfV3Response"
 								},
 								"example": {
-									"id": "0123456789abcdef01234567",
-									"username": "my_username",
+									"id": "000000000000000000000000",
+									"username": "example_user",
+									"badges": [
+										"000000000000000000000000",
+										"000000000000000000000000",
+										"000000000000000000000000"
+									],
 									"profileImage": {
-										"width": 512,
-										"height": 512,
-										"path": "https://pbs.floatplane.com/profile_images/default/user12.png",
+										"width": 720,
+										"height": 720,
+										"path": "https://cdn.example.invalid/redacted.jpg",
 										"childImages": [
-											{
-												"width": 250,
-												"height": 250,
-												"path": "https://pbs.floatplane.com/profile_images/default/user12_250x250.png"
-											},
 											{
 												"width": 100,
 												"height": 100,
-												"path": "https://pbs.floatplane.com/profile_images/default/user12_100x100.png"
+												"path": "https://cdn.example.invalid/redacted.jpg"
+											},
+											{
+												"width": 250,
+												"height": 250,
+												"path": "https://cdn.example.invalid/redacted.jpg"
 											}
 										]
 									},
-									"email": "testemail@example.com",
-									"displayName": "Firstname Lastname",
+									"email": "user@example.invalid",
+									"displayName": "Example User",
 									"creators": [],
-									"scheduledDeletionDate": null
+									"isModerator": true,
+									"isGlobalModerator": false,
+									"moderatorCreators": [
+										"000000000000000000000000"
+									]
 								}
 							}
 						}
@@ -19934,7 +19947,8 @@
 						"in": "query",
 						"name": "id",
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"example": "000000000000000000000000"
 						},
 						"required": true,
 						"description": "The GUID of the creator to retrieve posts from."
@@ -20093,361 +20107,121 @@
 								},
 								"example": [
 									{
-										"id": "Dw2ms0AgL8",
-										"guid": "Dw2ms0AgL8",
-										"title": "Livestream VOD – October 9, 2021 @ 07:18 – First Linux Stream",
-										"text": "<p>chat on Twitch</p>",
+										"id": "example-id-redacted",
+										"guid": "example-id-redacted",
+										"title": "Example title (redacted)",
+										"text": "Example post body (redacted).",
+										"textMarkdown": "Example post body (**redacted**).",
 										"type": "blogPost",
-										"tags": [
-											"test"
-										],
-										"attachmentOrder": [
-											"TViGzkuIic"
-										],
+										"tags": [],
+										"releaseDate": "2026-10-02T00:37:00.028Z",
+										"likes": 111,
+										"dislikes": 0,
+										"score": 111,
+										"comments": 11,
+										"isAccessible": true,
 										"metadata": {
 											"hasVideo": true,
 											"videoCount": 1,
-											"videoDuration": 5689,
+											"videoDuration": 445,
 											"hasAudio": false,
 											"audioCount": 0,
 											"audioDuration": 0,
 											"hasPicture": false,
 											"pictureCount": 0,
+											"isFeatured": false,
+											"displayDuration": 445,
 											"hasGallery": false,
-											"galleryCount": 0,
-											"isFeatured": false
+											"galleryCount": 0
 										},
-										"releaseDate": "2021-10-09T09:29:00.039Z",
-										"likes": 41,
-										"dislikes": 0,
-										"score": 41,
-										"comments": 28,
-										"creator": {
-											"id": "59f94c0bdd241b70349eb72b",
-											"owner": {
-												"id": "59f94c0bdd241b70349eb723",
-												"username": "Linus"
-											},
-											"title": "LinusTechTips",
-											"urlname": "linustechtips",
-											"description": "We make entertaining videos about technology, including tech reviews, showcases and other content.",
-											"about": "# We're LinusTechTips\nWe make videos and stuff, cool eh?",
-											"category": {
-												"title": "Technology"
-											},
-											"cover": {
-												"width": 1990,
-												"height": 519,
-												"path": "https://pbs.floatplane.com/cover_images/59f94c0bdd241b70349eb72b/696951209272749_1521668313867.jpeg",
-												"childImages": [
-													{
-														"width": 1245,
-														"height": 325,
-														"path": "https://pbs.floatplane.com/cover_images/59f94c0bdd241b70349eb72b/696951209272749_1521668313867_1245x325.jpeg"
-													}
-												]
-											},
-											"icon": {
-												"width": 600,
-												"height": 600,
-												"path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205.jpeg",
-												"childImages": [
-													{
-														"width": 250,
-														"height": 250,
-														"path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205_250x250.jpeg"
-													},
-													{
-														"width": 100,
-														"height": 100,
-														"path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205_100x100.jpeg"
-													}
-												]
-											},
-											"liveStream": {
-												"id": "5c13f3c006f1be15e08e05c0",
-												"title": "First Linux Stream",
-												"description": "<p>chat on Twitch</p>",
-												"thumbnail": {
-													"width": 1200,
-													"height": 675,
-													"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/084281881402899_1633761128412.jpeg",
-													"childImages": [
-														{
-															"width": 400,
-															"height": 225,
-															"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/084281881402899_1633761128412_400x225.jpeg"
-														}
-													]
-												},
-												"owner": "59f94c0bdd241b70349eb72b",
-												"streamPath": "/api/video/v1/us-east-1.758417551536.channel.yKkxur4ukc0B.m3u8",
-												"offline": {
-													"title": "Offline",
-													"description": "We're offline for now – please check back later!",
-													"thumbnail": {
-														"width": 1920,
-														"height": 1080,
-														"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/894654974252956_1549059179026.jpeg",
-														"childImages": [
-															{
-																"width": 400,
-																"height": 225,
-																"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/894654974252956_1549059179026_400x225.jpeg"
-															},
-															{
-																"width": 1200,
-																"height": 675,
-																"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/894654974252956_1549059179026_1200x675.jpeg"
-															}
-														]
-													}
-												}
-											},
-											"subscriptionPlans": [
-												{
-													"id": "5d48d0306825b5780db93d07",
-													"title": "LTT Supporter (1080p)",
-													"description": "Includes:\n- Early access (when possible)\n- Live Streaming\n- Behind-the-scenes, cutting room floor & exclusives\n\nNOTE: Tech Quickie and TechLinked are included for now, but will move to their own Floatplane pages in the future",
-													"price": "5.00",
-													"priceYearly": "50.00",
-													"currency": "usd",
-													"logo": null,
-													"interval": "month",
-													"featured": true,
-													"allowGrandfatheredAccess": false,
-													"discordServers": [],
-													"discordRoles": []
-												},
-												{
-													"id": "5e0ba6ac14e2590f760a0f0f",
-													"title": "LTT Supporter Plus",
-													"description": "You are the real MVP. \n\nYour support helps us continue to build out our team, drive up production values, run experiments that might lose money for a long time (*cough* LTX *cough*) and otherwise be the best content creators we can be.\n\nThis tier includes all the perks of the previous ones, but at floatplane's glorious high bitrate 4K!",
-													"price": "10.00",
-													"priceYearly": "100.00",
-													"currency": "usd",
-													"logo": null,
-													"interval": "month",
-													"featured": false,
-													"allowGrandfatheredAccess": false,
-													"discordServers": [],
-													"discordRoles": []
-												}
-											],
-											"discoverable": true,
-											"subscriberCountDisplay": "total",
-											"incomeDisplay": false,
-											"card": {
-												"width": 375,
-												"height": 500,
-												"path": "https://pbs.floatplane.com/creator_card/59f94c0bdd241b70349eb72b/281467946609369_1551250329871.jpeg",
-												"childImages": [
-													{
-														"width": 300,
-														"height": 400,
-														"path": "https://pbs.floatplane.com/creator_card/59f94c0bdd241b70349eb72b/281467946609369_1551250329871_300x400.jpeg"
-													}
-												]
-											}
-										},
-										"wasReleasedSilently": true,
+										"selfUserInteraction": null,
 										"thumbnail": {
-											"width": 1200,
-											"height": 675,
-											"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/084281881402899_1633761128412.jpeg",
+											"width": 1920,
+											"height": 1080,
+											"path": "https://cdn.example.invalid/redacted.jpg",
 											"childImages": [
 												{
 													"width": 400,
 													"height": 225,
-													"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/084281881402899_1633761128412_400x225.jpeg"
+													"path": "https://cdn.example.invalid/redacted.jpg"
+												},
+												{
+													"width": 1200,
+													"height": 675,
+													"path": "https://cdn.example.invalid/redacted.jpg"
+												},
+												{
+													"width": 1920,
+													"height": 1080,
+													"path": "https://cdn.example.invalid/redacted.jpg"
 												}
 											]
 										},
-										"isAccessible": true,
-										"videoAttachments": [
-											"TViGzkuIic"
-										],
-										"audioAttachments": [],
-										"pictureAttachments": [],
-										"galleryAttachments": []
-									},
-									{
-										"id": "ge4gLGfXnz",
-										"guid": "ge4gLGfXnz",
-										"title": "Livestream VOD – October 8, 2021 @ 20:26 – I Have MORE to Say About Steam Deck - WAN Show October 8, 2021",
-										"text": "<p>Honey automatically applies the best coupon codes to save you money at </p><p>different online checkouts, try it now at <a href=\"https://www.joinhoney.com/linus\">https://www.joinhoney.com/linus</a></p><p><br /></p><p>Buy a Seasonic Ultra Titanium PSU</p><p>On Amazon: <a href=\"https://geni.us/q4lnefC\">https://geni.us/q4lnefC</a></p><p>On NewEgg: <a href=\"https://lmg.gg/8KV3S\">https://lmg.gg/8KV3S</a></p><p><br /></p><p>Visit <a href=\"https://www.squarespace.com/WAN\">https://www.squarespace.com/WAN</a> and use offer code WAN for 10% off</p><p><br /></p><p>Podcast Download: TBD</p><p><br /></p><p>Check out our other Podcasts:</p><p>Carpool Critics Movie Podcast: <a href=\"https://www.youtube.com/channel/UCt-oJR5teQIjOAxCmIQvcgA\">https://www.youtube.com/channel/UCt-oJR5teQIjOAxCmIQvcgA</a></p><p><br /></p><p>Timestamps TBD</p>",
-										"type": "blogPost",
-										"attachmentOrder": [
-											"psqoN3CgMH",
-											"KijsTQP8Rr"
-										],
-										"metadata": {
-											"hasVideo": true,
-											"videoCount": 2,
-											"videoDuration": 9506,
-											"hasAudio": false,
-											"audioCount": 0,
-											"audioDuration": 0,
-											"hasPicture": false,
-											"pictureCount": 0,
-											"hasGallery": false,
-											"galleryCount": 0,
-											"isFeatured": false
-										},
-										"releaseDate": "2021-10-09T09:28:00.015Z",
-										"likes": 43,
-										"dislikes": 3,
-										"score": 40,
-										"comments": 24,
 										"creator": {
-											"id": "59f94c0bdd241b70349eb72b",
-											"owner": {
-												"id": "59f94c0bdd241b70349eb723",
-												"username": "Linus"
-											},
-											"title": "LinusTechTips",
+											"id": "000000000000000000000000",
+											"title": "Example title (redacted)",
 											"urlname": "linustechtips",
-											"description": "We make entertaining videos about technology, including tech reviews, showcases and other content.",
-											"about": "# We're LinusTechTips\nWe make videos and stuff, cool eh?",
+											"description": "Example description (redacted).",
+											"about": "Example about text (redacted).",
 											"category": {
-												"title": "Technology"
-											},
-											"cover": {
-												"width": 1990,
-												"height": 519,
-												"path": "https://pbs.floatplane.com/cover_images/59f94c0bdd241b70349eb72b/696951209272749_1521668313867.jpeg",
-												"childImages": [
-													{
-														"width": 1245,
-														"height": 325,
-														"path": "https://pbs.floatplane.com/cover_images/59f94c0bdd241b70349eb72b/696951209272749_1521668313867_1245x325.jpeg"
-													}
-												]
+												"id": "000000000000000000000000",
+												"title": "Example title (redacted)"
 											},
 											"icon": {
 												"width": 600,
 												"height": 600,
-												"path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205.jpeg",
+												"path": "https://cdn.example.invalid/redacted.jpg",
 												"childImages": [
 													{
 														"width": 250,
 														"height": 250,
-														"path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205_250x250.jpeg"
+														"path": "https://cdn.example.invalid/redacted.jpg"
 													},
 													{
 														"width": 100,
 														"height": 100,
-														"path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205_100x100.jpeg"
+														"path": "https://cdn.example.invalid/redacted.jpg"
 													}
 												]
 											},
-											"liveStream": {
-												"id": "5c13f3c006f1be15e08e05c0",
-												"title": "First Linux Stream",
-												"description": "<p>chat on Twitch</p>",
-												"thumbnail": {
-													"width": 1200,
-													"height": 675,
-													"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/084281881402899_1633761128412.jpeg",
-													"childImages": [
-														{
-															"width": 400,
-															"height": 225,
-															"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/084281881402899_1633761128412_400x225.jpeg"
-														}
-													]
-												},
-												"owner": "59f94c0bdd241b70349eb72b",
-												"streamPath": "/api/video/v1/us-east-1.758417551536.channel.yKkxur4ukc0B.m3u8",
-												"offline": {
-													"title": "Offline",
-													"description": "We're offline for now – please check back later!",
-													"thumbnail": {
-														"width": 1920,
-														"height": 1080,
-														"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/894654974252956_1549059179026.jpeg",
-														"childImages": [
-															{
-																"width": 400,
-																"height": 225,
-																"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/894654974252956_1549059179026_400x225.jpeg"
-															},
-															{
-																"width": 1200,
-																"height": 675,
-																"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/894654974252956_1549059179026_1200x675.jpeg"
-															}
-														]
-													}
-												}
-											},
-											"subscriptionPlans": [
-												{
-													"id": "5d48d0306825b5780db93d07",
-													"title": "LTT Supporter (1080p)",
-													"description": "Includes:\n- Early access (when possible)\n- Live Streaming\n- Behind-the-scenes, cutting room floor & exclusives\n\nNOTE: Tech Quickie and TechLinked are included for now, but will move to their own Floatplane pages in the future",
-													"price": "5.00",
-													"priceYearly": "50.00",
-													"currency": "usd",
-													"logo": null,
-													"interval": "month",
-													"featured": true,
-													"allowGrandfatheredAccess": false,
-													"discordServers": [],
-													"discordRoles": []
-												},
-												{
-													"id": "5e0ba6ac14e2590f760a0f0f",
-													"title": "LTT Supporter Plus",
-													"description": "You are the real MVP. \n\nYour support helps us continue to build out our team, drive up production values, run experiments that might lose money for a long time (*cough* LTX *cough*) and otherwise be the best content creators we can be.\n\nThis tier includes all the perks of the previous ones, but at floatplane's glorious high bitrate 4K!",
-													"price": "10.00",
-													"priceYearly": "100.00",
-													"currency": "usd",
-													"logo": null,
-													"interval": "month",
-													"featured": false,
-													"allowGrandfatheredAccess": false,
-													"discordServers": [],
-													"discordRoles": []
-												}
-											],
-											"discoverable": true,
-											"subscriberCountDisplay": "total",
-											"incomeDisplay": false,
-											"card": {
-												"width": 375,
-												"height": 500,
-												"path": "https://pbs.floatplane.com/creator_card/59f94c0bdd241b70349eb72b/281467946609369_1551250329871.jpeg",
+											"channels": [
+												"63fe42c309e691e4e36de93d",
+												"65eba4d7788cf21d40c30f57",
+												"64135f82fc76ab7f9fbdc876",
+												"649dbade3540dbc3945eeda7",
+												"654195b7dc8d232e5ca0971d",
+												"64135ed078d6262f717341b7",
+												"64135e901ebaee42e258eb0b",
+												"6413623f5b12cca228a28e78",
+												"6413534d88c13c181c3e2809",
+												"64135da7ce81077a8480c679",
+												"64135e27c773b27ff22c97eb",
+												"64b9a4831786c66485efeb01"
+											]
+										},
+										"channel": {
+											"id": "000000000000000000000000",
+											"title": "Example title (redacted)",
+											"urlname": "gamelinked",
+											"about": "Example about text (redacted).",
+											"icon": {
+												"width": 720,
+												"height": 720,
+												"path": "https://cdn.example.invalid/redacted.jpg",
 												"childImages": [
 													{
-														"width": 300,
-														"height": 400,
-														"path": "https://pbs.floatplane.com/creator_card/59f94c0bdd241b70349eb72b/281467946609369_1551250329871_300x400.jpeg"
+														"width": 100,
+														"height": 100,
+														"path": "https://cdn.example.invalid/redacted.jpg"
+													},
+													{
+														"width": 250,
+														"height": 250,
+														"path": "https://cdn.example.invalid/redacted.jpg"
 													}
 												]
 											}
-										},
-										"wasReleasedSilently": false,
-										"thumbnail": {
-											"width": 640,
-											"height": 360,
-											"path": "https://pbs.floatplane.com/blogPost_thumbnails/ge4gLGfXnz/564833356017787_1633771544979.jpeg",
-											"childImages": [
-												{
-													"width": 400,
-													"height": 225,
-													"path": "https://pbs.floatplane.com/blogPost_thumbnails/ge4gLGfXnz/564833356017787_1633771544979_400x225.jpeg"
-												}
-											]
-										},
-										"isAccessible": true,
-										"videoAttachments": [
-											"KijsTQP8Rr",
-											"psqoN3CgMH"
-										],
-										"audioAttachments": [],
-										"pictureAttachments": [],
-										"galleryAttachments": []
+										}
 									}
 								]
 							}
@@ -21022,7 +20796,8 @@
 						"in": "query",
 						"name": "id",
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"example": "example-id-redacted"
 						},
 						"required": true,
 						"description": "The ID of the post to be retrieved."
@@ -21037,77 +20812,119 @@
 									"$ref": "#/components/schemas/ContentPostV3Response"
 								},
 								"example": {
-									"id": "Dw2ms0AgL8",
-									"guid": "Dw2ms0AgL8",
-									"title": "Livestream VOD – October 9, 2021 @ 07:18 – First Linux Stream",
-									"text": "<p>chat on Twitch</p>",
+									"id": "example-id-redacted",
+									"guid": "example-id-redacted",
+									"title": "Example title (redacted)",
+									"text": "Example post body (redacted).",
+									"textMarkdown": "Example post body (**redacted**).",
 									"type": "blogPost",
-									"tags": [
-										"test"
-									],
-									"attachmentOrder": [
-										"TViGzkuIic"
-									],
-									"metadata": {
-										"hasVideo": true,
-										"videoCount": 1,
-										"videoDuration": 5689,
-										"hasAudio": false,
-										"audioCount": 0,
-										"audioDuration": 0,
-										"hasPicture": false,
-										"pictureCount": 0,
-										"hasGallery": false,
-										"galleryCount": 0,
-										"isFeatured": false
+									"channel": {
+										"id": "000000000000000000000000",
+										"creator": "000000000000000000000000",
+										"title": "Example title (redacted)",
+										"urlname": "gamelinked",
+										"about": "Example about text (redacted).",
+										"order": 5,
+										"cover": null,
+										"card": null,
+										"icon": {
+											"width": 720,
+											"height": 720,
+											"path": "https://cdn.example.invalid/redacted.jpg",
+											"childImages": [
+												{
+													"width": 100,
+													"height": 100,
+													"path": "https://cdn.example.invalid/redacted.jpg"
+												},
+												{
+													"width": 250,
+													"height": 250,
+													"path": "https://cdn.example.invalid/redacted.jpg"
+												}
+											]
+										}
 									},
-									"releaseDate": "2021-10-09T09:29:00.039Z",
-									"likes": 41,
+									"tags": [],
+									"attachmentOrder": [
+										"example-id-redacted"
+									],
+									"releaseDate": "2026-10-02T00:37:00.028Z",
+									"likes": 111,
 									"dislikes": 0,
-									"score": 41,
-									"comments": 28,
+									"score": 111,
+									"comments": 11,
 									"creator": {
-										"id": "59f94c0bdd241b70349eb72b",
-										"owner": "59f94c0bdd241b70349eb723",
-										"title": "LinusTechTips",
+										"id": "000000000000000000000000",
+										"owner": "000000000000000000000000",
+										"title": "Example title (redacted)",
 										"urlname": "linustechtips",
-										"description": "We make entertaining videos about technology, including tech reviews, showcases and other content.",
-										"about": "# We're LinusTechTips\nWe make videos and stuff, cool eh?",
+										"description": "Example description (redacted).",
+										"about": "Example about text (redacted).",
 										"category": "59f94c0bdd241b70349eb727",
 										"cover": null,
 										"icon": {
 											"width": 600,
 											"height": 600,
-											"path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205.jpeg",
+											"path": "https://cdn.example.invalid/redacted.jpg",
 											"childImages": [
 												{
 													"width": 250,
 													"height": 250,
-													"path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205_250x250.jpeg"
+													"path": "https://cdn.example.invalid/redacted.jpg"
 												},
 												{
 													"width": 100,
 													"height": 100,
-													"path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205_100x100.jpeg"
+													"path": "https://cdn.example.invalid/redacted.jpg"
 												}
 											]
 										},
+										"card": null,
 										"liveStream": null,
 										"subscriptionPlans": null,
 										"discoverable": true,
+										"visibility": "public",
 										"subscriberCountDisplay": "total",
-										"incomeDisplay": false
+										"incomeDisplay": false,
+										"defaultChannel": "6413623f5b12cca228a28e78"
 									},
-									"wasReleasedSilently": true,
+									"wasReleasedSilently": false,
+									"metadata": {
+										"hasVideo": true,
+										"videoCount": 1,
+										"videoDuration": 445,
+										"hasAudio": false,
+										"audioCount": 0,
+										"audioDuration": 0,
+										"hasPicture": false,
+										"pictureCount": 0,
+										"isFeatured": false,
+										"displayDuration": 445,
+										"hasGallery": false,
+										"galleryCount": 0
+									},
+									"galleryAttachments": [],
+									"selfUserInteraction": null,
 									"thumbnail": {
-										"width": 1200,
-										"height": 675,
-										"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/084281881402899_1633761128412.jpeg",
+										"width": 1920,
+										"height": 1080,
+										"path": "https://cdn.example.invalid/redacted.jpg",
 										"childImages": [
 											{
 												"width": 400,
 												"height": 225,
-												"path": "https://pbs.floatplane.com/stream_thumbnails/5c13f3c006f1be15e08e05c0/084281881402899_1633761128412_400x225.jpeg"
+												"path": "https://cdn.example.invalid/redacted.jpg"
+											},
+											{
+												"width": 1200,
+												"height": 675,
+												"path": "https://cdn.example.invalid/redacted.jpg"
+											},
+											{
+												"width": 1920,
+												"height": 1080,
+												"path": "https://cdn.example.invalid/redacted.jpg"
 											}
 										]
 									},
@@ -21115,57 +20932,103 @@
 									"userInteraction": [],
 									"videoAttachments": [
 										{
-											"id": "TViGzkuIic",
-											"guid": "TViGzkuIic",
-											"title": "October 9, 2021 @ 07:18 – First Linux Stream",
+											"id": "example-id-redacted",
+											"guid": "example-id-redacted",
+											"title": "Example title (redacted)",
 											"type": "video",
-											"description": "",
+											"description": "Example description (redacted).",
 											"releaseDate": null,
-											"duration": 5689,
-											"creator": "59f94c0bdd241b70349eb72b",
+											"duration": 445,
+											"creator": "000000000000000000000000",
 											"likes": 0,
 											"dislikes": 0,
 											"score": 0,
 											"isProcessing": false,
-											"primaryBlogPost": "Dw2ms0AgL8",
+											"primaryBlogPost": "example-id-redacted",
+											"levels": [
+												{
+													"name": "example",
+													"width": 640,
+													"height": 360,
+													"label": "example",
+													"order": 0
+												},
+												{
+													"name": "example",
+													"width": 854,
+													"height": 480,
+													"label": "example",
+													"order": 1
+												},
+												{
+													"name": "example",
+													"width": 1280,
+													"height": 720,
+													"label": "example",
+													"order": 2
+												},
+												{
+													"name": "example",
+													"width": 1920,
+													"height": 1080,
+													"label": "example",
+													"order": 4
+												},
+												{
+													"name": "example",
+													"width": 3840,
+													"height": 2160,
+													"label": "example",
+													"order": 7
+												}
+											],
+											"textTracks": [
+												{
+													"id": "000000000000000000000000",
+													"src": "https://cdn.example.invalid/redacted.jpg",
+													"kind": "captions",
+													"language": "en",
+													"generated": true,
+													"processing": false
+												}
+											],
+											"selfUserInteraction": null,
 											"thumbnail": {
 												"width": 1920,
 												"height": 1080,
-												"path": "https://pbs.floatplane.com/content_thumbnails/TViGzkuIic/324783659287024_1633769709593.jpeg",
-												"childImages": []
-											},
-											"isAccessible": true
-										}
-									],
-									"audioAttachments": [
-										{
-											"id": "iGssjNGPSD",
-											"guid": "iGssjNGPSD",
-											"title": "Robocop FP.mp3",
-											"type": "audio",
-											"description": "",
-											"duration": 4165,
-											"waveform": {
-												"dataSetLength": 3,
-												"highestValue": 71,
-												"lowestValue": 50,
-												"data": [
-													71,
-													50,
-													69
+												"path": "https://cdn.example.invalid/redacted.jpg",
+												"childImages": [
+													{
+														"width": 400,
+														"height": 225,
+														"path": "https://cdn.example.invalid/redacted.jpg"
+													},
+													{
+														"width": 1920,
+														"height": 1080,
+														"path": "https://cdn.example.invalid/redacted.jpg"
+													},
+													{
+														"width": 1200,
+														"height": 675,
+														"path": "https://cdn.example.invalid/redacted.jpg"
+													}
 												]
 											},
-											"creator": "59f94c0bdd241b70349eb72b",
-											"likes": 0,
-											"dislikes": 0,
-											"score": 0,
-											"isProcessing": false,
-											"primaryBlogPost": "jVU2y9PlnG",
-											"isAccessible": true
+											"isAccessible": true,
+											"blogPosts": [
+												"example-id-redacted"
+											],
+											"timelineSprite": {
+												"width": 35680,
+												"height": 90,
+												"path": "https://cdn.example.invalid/redacted.jpg",
+												"childImages": []
+											}
 										}
 									],
-									"pictureAttachments": [],
-									"galleryAttachments": []
+									"audioAttachments": [],
+									"pictureAttachments": []
 								}
 							}
 						}
@@ -21784,7 +21647,8 @@
 						"in": "query",
 						"name": "id",
 						"schema": {
-							"type": "string"
+							"type": "string",
+							"example": "example-id-redacted"
 						},
 						"required": true,
 						"description": "The ID of the video attachment object, from the `BlogPostModelV3`."
@@ -21799,69 +21663,100 @@
 									"$ref": "#/components/schemas/ContentVideoV3Response"
 								},
 								"example": {
-									"id": "TViGzkuIic",
-									"guid": "TViGzkuIic",
-									"title": "October 9, 2021 @ 07:18 – First Linux Stream",
+									"id": "example-id-redacted",
+									"guid": "example-id-redacted",
+									"title": "Example title (redacted)",
 									"type": "video",
-									"description": "",
+									"description": "Example description (redacted).",
 									"releaseDate": null,
-									"duration": 5689,
-									"creator": "59f94c0bdd241b70349eb72b",
+									"duration": 445,
+									"creator": "000000000000000000000000",
 									"likes": 0,
 									"dislikes": 0,
 									"score": 0,
 									"isProcessing": false,
-									"primaryBlogPost": "Dw2ms0AgL8",
-									"thumbnail": {
-										"width": 1920,
-										"height": 1080,
-										"path": "https://pbs.floatplane.com/content_thumbnails/TViGzkuIic/324783659287024_1633769709593.jpeg",
-										"childImages": []
-									},
-									"isAccessible": true,
-									"blogPosts": [
-										"Dw2ms0AgL8"
-									],
-									"timelineSprite": {
-										"width": 4960,
-										"height": 2610,
-										"path": "https://pbs.floatplane.com/timeline_sprite/TViGzkuIic/142493855372807_1633769996492.jpeg",
-										"childImages": []
-									},
-									"userInteraction": [],
+									"primaryBlogPost": "example-id-redacted",
 									"levels": [
 										{
-											"name": "360",
+											"name": "example",
 											"width": 640,
 											"height": 360,
-											"label": "360p",
+											"label": "example",
 											"order": 0
 										},
 										{
-											"name": "480",
+											"name": "example",
 											"width": 854,
 											"height": 480,
-											"label": "480p",
+											"label": "example",
 											"order": 1
 										},
 										{
-											"name": "720",
+											"name": "example",
 											"width": 1280,
 											"height": 720,
-											"label": "720p",
+											"label": "example",
 											"order": 2
+										},
+										{
+											"name": "example",
+											"width": 1920,
+											"height": 1080,
+											"label": "example",
+											"order": 4
+										},
+										{
+											"name": "example",
+											"width": 3840,
+											"height": 2160,
+											"label": "example",
+											"order": 7
 										}
 									],
 									"textTracks": [
 										{
-											"id": "6823ca1cb3c97e3f8cefe6bb",
-											"src": "https://941d59f1900d0a09025413971374845d.r2.cloudflarestorage.com/prod-texttrack/text_tracks/BX3VEUGz2v/AQsb2my1nC6x6XX.vtt?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=848bccaff51d5141475de2d2a180f979%2F20250607%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20250607T191449Z&X-Amz-Expires=900&X-Amz-Signature=4787e98e0d22cd06aec5a0d76fa6829138a95582e4d831964004471ff48fb1c1&X-Amz-SignedHeaders=host&response-expires=Sat%2C%2007%20Jun%202025%2019%3A14%3A50%20GMT&x-amz-checksum-mode=ENABLED&x-id=GetObject",
+											"id": "000000000000000000000000",
+											"src": "https://cdn.example.invalid/redacted.jpg",
 											"kind": "captions",
 											"language": "en",
-											"generated": false,
+											"generated": true,
 											"processing": false
 										}
-									]
+									],
+									"selfUserInteraction": null,
+									"thumbnail": {
+										"width": 1920,
+										"height": 1080,
+										"path": "https://cdn.example.invalid/redacted.jpg",
+										"childImages": [
+											{
+												"width": 400,
+												"height": 225,
+												"path": "https://cdn.example.invalid/redacted.jpg"
+											},
+											{
+												"width": 1920,
+												"height": 1080,
+												"path": "https://cdn.example.invalid/redacted.jpg"
+											},
+											{
+												"width": 1200,
+												"height": 675,
+												"path": "https://cdn.example.invalid/redacted.jpg"
+											}
+										]
+									},
+									"isAccessible": true,
+									"blogPosts": [
+										"example-id-redacted"
+									],
+									"timelineSprite": {
+										"width": 35680,
+										"height": 90,
+										"path": "https://cdn.example.invalid/redacted.jpg",
+										"childImages": []
+									},
+									"userInteraction": []
 								}
 							}
 						}

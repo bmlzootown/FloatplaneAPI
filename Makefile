@@ -15,7 +15,7 @@ help:
 	@echo "frontend-evidence-diff-test frontend-evidence-diff frontend-evidence-diff-latest"
 	@echo "frontend-phase2-orch-test"
 	@echo "api-shape-test api-shape-device-login api-shape-capture api-shape-unauth-list"
-	@echo "api-shape-diff-trees"
+	@echo "api-shape-diff-trees api-shape-capture-examples api-shape-apply-examples"
 
 # Section: Helpers and structural
 
@@ -103,6 +103,13 @@ api-shape-device-login:
 
 api-shape-capture:
 	node tools/fp-api-shape-canary/cli.mjs capture
+
+# Phase A: capture + sanitized examples (raw under gitignored captures/*/raw/)
+api-shape-capture-examples:
+	node tools/fp-api-shape-canary/cli.mjs capture --include-video --write-examples
+
+api-shape-apply-examples:
+	node tools/fp-api-shape-canary/cli.mjs apply-examples
 
 api-shape-unauth-list:
 	node tools/fp-api-shape-canary/cli.mjs unauth-list

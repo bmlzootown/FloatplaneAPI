@@ -150,13 +150,59 @@ export async function writeCapture(input) {
 }
 
 /**
- * @param {string} filePath
+ * Write raw (gitignored) + sanitized reviewable examples.
+ * Raw lives under captures/{id}/raw/ (gitignore: artifacts/api-shape/** slash raw/).
+ * Sanitized fixtures go to artifacts/api-shape/examples/ for OpenAPI wiring.
+ *
+ * @param {{
+ *   artifactsRoot: string,
+ *   captureId: string,
+ *   captureDir: string,
+ *   rawBodies: Record<string, unknown>,
+ *   sanitizedDocs: Record<string, object>,
+ * }} input
  */
-export async function fileExists(filePath) {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
+export async function writeSanitizedExamples(input) {
+  const rawDir = path.join(input.captureDir, 'raw');
+  const examplesDir = path.join(input.artifactsRoot, 'examples');
+  await mkdir(rawDir, { recursive: true });
+  await mkdir(examplesDir, { recursive: true });
+
+  /** @type {string[]} */
+  const files = [];
+  for (const [id, body] of Object.entries(input.rawBodies).sort(([a], [b]) => a.localeCompare(b))) {
+    const rawFile = path.join(rawDir, `${id}.json`);
+    await writeFile(rawFile, `${JSON.stringify(body, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    files.push(rawFile);
   }
+  for (const [id, doc] of Object.entries(input.sanitizedDocs).sort(([a], [b]) => a.localeCompare(b))) {
+    const file = path.join(examplesDir, `${id}.json`);
+    await writeFile(file, `${JSON.stringify(doc, null, 2)}\n`, 'utf8');
+    files.push(file);
+  }
+
+  const readme = path.join(examplesDir, 'README.md');
+  await writeFile(
+    readme,
+    `# Sanitized API response examples (Phase A)
+
+Generated from a live authenticated capture via \`fp-api-shape-canary\` with
+\`--write-examples\`. Values are redacted (titles, text/markdown, email,
+usernames, payment IDs, CDN paths, opaque ids). **Do not** commit
+\`captures/*/raw/\` — that directory is gitignored.
+
+Apply into OpenAPI with:
+
+\`\`\`sh
+node tools/fp-api-shape-canary/cli.mjs apply-examples
+make trim && make docs-explorer
+\`\`\`
+
+Source capture: \`${input.captureId}\`
+`,
+    'utf8',
+  );
+  files.push(readme);
+
+  return { examplesDir, rawDir, files };
 }

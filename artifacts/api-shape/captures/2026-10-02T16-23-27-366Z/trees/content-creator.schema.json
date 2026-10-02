@@ -1,0 +1,255 @@
+{
+  "schemaVersion": 1,
+  "toolId": "fp-api-shape-canary",
+  "toolVersion": "3.0.0",
+  "endpointId": "content-creator",
+  "label": "observed",
+  "captureId": "2026-10-02T16-23-27-366Z",
+  "tree": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "object",
+          "properties": {
+            "about": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "object",
+              "properties": {
+                "childImages": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "height": {
+                        "type": "number"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "width": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "lengthObserved": 2
+                },
+                "height": {
+                  "type": "number"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "width": {
+                  "type": "number"
+                }
+              }
+            },
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "urlname": {
+              "type": "string"
+            }
+          }
+        },
+        "comments": {
+          "type": "number"
+        },
+        "creator": {
+          "type": "object",
+          "properties": {
+            "about": {
+              "type": "string"
+            },
+            "category": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              }
+            },
+            "channels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "lengthObserved": 12
+            },
+            "description": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "object",
+              "properties": {
+                "childImages": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "height": {
+                        "type": "number"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "width": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "lengthObserved": 2
+                },
+                "height": {
+                  "type": "number"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "width": {
+                  "type": "number"
+                }
+              }
+            },
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "urlname": {
+              "type": "string"
+            }
+          }
+        },
+        "dislikes": {
+          "type": "number"
+        },
+        "guid": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isAccessible": {
+          "type": "boolean"
+        },
+        "likes": {
+          "type": "number"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "audioCount": {
+              "type": "number"
+            },
+            "audioDuration": {
+              "type": "number"
+            },
+            "displayDuration": {
+              "type": "number"
+            },
+            "galleryCount": {
+              "type": "number"
+            },
+            "hasAudio": {
+              "type": "boolean"
+            },
+            "hasGallery": {
+              "type": "boolean"
+            },
+            "hasPicture": {
+              "type": "boolean"
+            },
+            "hasVideo": {
+              "type": "boolean"
+            },
+            "isFeatured": {
+              "type": "boolean"
+            },
+            "pictureCount": {
+              "type": "number"
+            },
+            "videoCount": {
+              "type": "number"
+            },
+            "videoDuration": {
+              "type": "number"
+            }
+          }
+        },
+        "releaseDate": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        },
+        "selfUserInteraction": {
+          "type": "null"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "unknown"
+          },
+          "lengthObserved": 0
+        },
+        "text": {
+          "type": "string"
+        },
+        "textMarkdown": {
+          "type": "string"
+        },
+        "thumbnail": {
+          "type": "object",
+          "properties": {
+            "childImages": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "height": {
+                    "type": "number"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "width": {
+                    "type": "number"
+                  }
+                }
+              },
+              "lengthObserved": 3
+            },
+            "height": {
+              "type": "number"
+            },
+            "path": {
+              "type": "string"
+            },
+            "width": {
+              "type": "number"
+            }
+          }
+        },
+        "title": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      }
+    },
+    "lengthObserved": 1
+  }
+}

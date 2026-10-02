@@ -41,6 +41,9 @@ const els = {
 	requestBody: document.getElementById("request-body"),
 	tryForm: document.getElementById("try-form"),
 	copyCurl: document.getElementById("copy-curl"),
+	examplePanel: document.getElementById("example-panel"),
+	exampleNote: document.getElementById("example-note"),
+	exampleBody: document.getElementById("example-body"),
 	responsePanel: document.getElementById("response-panel"),
 	responseMeta: document.getElementById("response-meta"),
 	responseBody: document.getElementById("response-body"),
@@ -154,6 +157,63 @@ function exampleFromSchema(schema, spec, depth = 0) {
 			if (s.properties) return exampleFromSchema({ ...s, type: "object" }, spec, depth);
 			return null;
 	}
+}
+
+/**
+ * Prefer media-type `example`, else first named `examples.*.value`.
+ * Does not synthesize from schema — offline panel shows only documented examples.
+ */
+function responseExampleFromOperation(op, spec) {
+	const responses = resolveRef(spec, op.operation.responses) || {};
+	const preferred = ["200", "201", "202", "204"];
+	const codes = [
+		...preferred.filter((c) => responses[c]),
+		...Object.keys(responses).filter((c) => !preferred.includes(c) && c !== "default"),
+	];
+	for (const code of codes) {
+		const resp = resolveRef(spec, responses[code]);
+		const content = resp?.content || {};
+		const media =
+			content["application/json"] ||
+			content["application/json; charset=utf-8"] ||
+			Object.values(content)[0];
+		if (!media) continue;
+		const resolved = resolveRef(spec, media);
+		if (resolved?.example !== undefined) {
+			return { status: code, source: "example", value: resolved.example };
+		}
+		const named = resolved?.examples;
+		if (named && typeof named === "object") {
+			for (const [name, entry] of Object.entries(named)) {
+				const ex = resolveRef(spec, entry);
+				if (ex && ex.value !== undefined) {
+					return {
+						status: code,
+						source: `examples.${name}`,
+						summary: ex.summary || name,
+						value: ex.value,
+					};
+				}
+			}
+		}
+	}
+	return null;
+}
+
+function renderResponseExample(op) {
+	if (!els.examplePanel) return;
+	const found = responseExampleFromOperation(op, state.spec);
+	if (!found) {
+		els.examplePanel.hidden = true;
+		els.exampleBody.textContent = "";
+		return;
+	}
+	els.examplePanel.hidden = false;
+	const bits = [`HTTP ${found.status}`, found.source];
+	if (found.summary) bits.push(found.summary);
+	els.exampleNote.textContent = `OpenAPI ${bits.join(" · ")} (offline; not a live request).`;
+	els.exampleBody.textContent =
+		typeof found.value === "string" ? found.value : JSON.stringify(found.value, null, 2);
 }
 
 function collectParameters(pathItem, operation) {
@@ -412,6 +472,8 @@ function selectOperation(id) {
 		els.bodyField.hidden = true;
 		els.requestBody.value = "";
 	}
+
+	renderResponseExample(op);
 
 	els.responsePanel.hidden = true;
 	els.responseMeta.textContent = "";

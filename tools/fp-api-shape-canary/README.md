@@ -33,6 +33,21 @@ make api-shape-device-login
 make api-shape-capture
 ```
 
+### Phase A sanitized examples
+
+```sh
+make api-shape-device-login
+make api-shape-capture-examples   # --include-video --write-examples
+# Review artifacts/api-shape/examples/*.json (redacted). Raw bodies stay in
+# captures/*/raw/ (gitignored) — never commit them.
+make api-shape-apply-examples    # wires OpenAPI response example + query id stubs
+make trim && make docs-explorer
+```
+
+Redaction policy: titles, `text` / `textMarkdown`, email/username/displayName,
+payment IDs, CDN paths, and opaque ids are stubbed. Structure/keys/types come
+from the live capture only (no invented fields).
+
 ## Allowlist (read-only)
 
 1. `GET /api/v3/user/self` — token sanity  

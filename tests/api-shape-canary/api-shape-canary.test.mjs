@@ -291,6 +291,70 @@ describe('apiGetJson', () => {
   });
 });
 
+describe('sanitize examples', () => {
+  it('redacts PII and content while preserving structure', async () => {
+    const { sanitizeExampleValue, sanitizeEndpointExample } = await import(
+      '../../tools/fp-api-shape-canary/lib/sanitize.mjs'
+    );
+    const live = {
+      id: '59f94c0bdd241b70349eb72b',
+      title: 'Secret live title',
+      text: 'Secret HTML body',
+      textMarkdown: 'Secret **markdown**',
+      email: 'brandon@example.com',
+      username: 'real_user',
+      displayName: 'Real Name',
+      paymentID: 'pay_live_abc',
+      selfUserInteraction: null,
+      metadata: { hasVideo: true, displayDuration: 12.5 },
+      thumbnail: { path: 'https://cdn.floatplane.com/secret.jpg', width: 100, height: 50 },
+      videoAttachments: [
+        {
+          id: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+          levels: [{ name: '1080p', width: 1920, height: 1080, label: '1080p', order: 1 }],
+          textTracks: [],
+          selfUserInteraction: null,
+        },
+      ],
+    };
+    const out = sanitizeExampleValue(live);
+    assert.equal(out.title, 'Example title (redacted)');
+    assert.equal(out.textMarkdown, 'Example post body (**redacted**).');
+    assert.equal(out.email, 'user@example.invalid');
+    assert.equal(out.username, 'example_user');
+    assert.equal(out.paymentID, 'pay_example_redacted');
+    assert.equal(out.selfUserInteraction, null);
+    assert.equal(out.metadata.hasVideo, true);
+    assert.equal(out.metadata.displayDuration, 12.5);
+    assert.equal(out.thumbnail.path, 'https://cdn.example.invalid/redacted.jpg');
+    assert.ok(out.videoAttachments[0].levels[0].width === 1920);
+    assert.ok(!JSON.stringify(out).includes('Secret'));
+    assert.ok(!JSON.stringify(out).includes('brandon@'));
+    assert.ok(!JSON.stringify(out).includes('real_user'));
+
+    const doc = sanitizeEndpointExample('content-post', live);
+    assert.equal(doc.endpointId, 'content-post');
+    assert.equal(doc.value.id, '000000000000000000000000');
+  });
+
+  it('keeps list shape but caps items', async () => {
+    const { sanitizeEndpointExample } = await import(
+      '../../tools/fp-api-shape-canary/lib/sanitize.mjs'
+    );
+    const doc = sanitizeEndpointExample(
+      'user-subscriptions',
+      [
+        { creator: 'aaaaaaaaaaaaaaaaaaaaaaaa', paymentID: 'pay1', plan: { title: 'Plan A' } },
+        { creator: 'bbbbbbbbbbbbbbbbbbbbbbbb', paymentID: 'pay2', plan: { title: 'Plan B' } },
+      ],
+      { maxItems: 1 },
+    );
+    assert.equal(doc.value.length, 1);
+    assert.equal(doc.value[0].paymentID, 'pay_example_redacted');
+    assert.equal(doc.value[0].plan.title, 'Example title (redacted)');
+  });
+});
+
 describe('fixture schema files', () => {
   it('diffs fixture trees offline', async () => {
     const from = JSON.parse(await readFile(path.join(FIXTURES, 'content-post-baseline.schema.json'), 'utf8'));
