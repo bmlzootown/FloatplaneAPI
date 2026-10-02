@@ -1,0 +1,16 @@
+{
+  "byEndpoint": {
+    "content-creator-unauth": {
+      "added": [
+        "$"
+      ],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 0,
+      "hasDrift": true,
+      "note": "no prior baseline for endpoint"
+    }
+  },
+  "hasDrift": false,
+  "firstCapture": true
+}
