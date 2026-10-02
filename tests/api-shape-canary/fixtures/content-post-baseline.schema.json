@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "toolId": "fp-api-shape-canary",
+  "endpointId": "content-post",
+  "label": "observed",
+  "tree": {
+    "type": "object",
+    "properties": {
+      "id": { "type": "string" },
+      "title": { "type": "string" },
+      "text": { "type": "string" },
+      "likes": { "type": "number" },
+      "metadata": {
+        "type": "object",
+        "properties": {
+          "hasVideo": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

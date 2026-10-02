@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "toolId": "fp-api-shape-canary",
+  "toolVersion": "3.0.0",
+  "captureId": "2026-10-02T15-45-52-581Z",
+  "capturedAt": "2026-10-02T15:45:52.581Z",
+  "allowlist": [
+    {
+      "id": "user-self",
+      "method": "GET",
+      "path": "/api/v3/user/self",
+      "optional": false
+    },
+    {
+      "id": "user-subscriptions",
+      "method": "GET",
+      "path": "/api/v3/user/subscriptions",
+      "optional": false
+    },
+    {
+      "id": "content-creator",
+      "method": "GET",
+      "path": "/api/v3/content/creator",
+      "optional": false
+    },
+    {
+      "id": "content-post",
+      "method": "GET",
+      "path": "/api/v3/content/post",
+      "optional": false
+    },
+    {
+      "id": "content-video",
+      "method": "GET",
+      "path": "/api/v3/content/video",
+      "optional": true
+    }
+  ],
+  "oidc": {
+    "issuer": "https://auth.floatplane.com/realms/floatplane",
+    "clientId": "fp-tv-app",
+    "realm": "floatplane",
+    "evidence": {
+      "clientIdSource": "artifacts/frontend/4.5.22-316-d74397b/.../js/index-BZVDPgzb.js — o_={baseUrl:\"https://auth.floatplane.com\",realm:\"floatplane\",clientId:\"fp-tv-app\",...}",
+      "deviceGrantSource": "OIDC discovery grant_types_supported includes urn:ietf:params:oauth:grant-type:device_code; device_authorization_endpoint present (observed 2026-10-02)"
+    },
+    "dpop": true
+  },
+  "calls": [
+    {
+      "id": "user-self",
+      "method": "GET",
+      "path": "/api/v3/user/self",
+      "status": 200,
+      "ok": true,
+      "auth": "DPoP"
+    },
+    {
+      "id": "user-subscriptions",
+      "method": "GET",
+      "path": "/api/v3/user/subscriptions",
+      "status": 200,
+      "ok": true,
+      "auth": "DPoP"
+    },
+    {
+      "id": "content-creator",
+      "method": "GET",
+      "path": "/api/v3/content/creator",
+      "status": 200,
+      "ok": true,
+      "auth": "DPoP",
+      "query": {
+        "id": "(redacted)",
+        "limit": 1
+      },
+      "creatorAttempt": "first"
+    },
+    {
+      "id": "content-creator",
+      "method": "GET",
+      "path": "/api/v3/content/creator",
+      "status": 200,
+      "ok": true,
+      "auth": "DPoP",
+      "query": {
+        "id": "(redacted)",
+        "limit": 1
+      },
+      "creatorAttempt": "fallback"
+    },
+    {
+      "id": "content-post",
+      "method": "GET",
+      "path": "/api/v3/content/post",
+      "status": 200,
+      "ok": true,
+      "auth": "DPoP",
+      "query": {
+        "id": "(redacted)"
+      }
+    }
+  ],
+  "notes": [
+    "Token present (eyJh…qrhw (len=1493)); auth=DPoP",
+    "content-creator for a subscribed creator returned no posts; trying next"
+  ],
+  "errors": [],
+  "idsPresent": {
+    "creatorId": true,
+    "postId": true,
+    "videoId": true
+  },
+  "endpointIds": [
+    "content-creator",
+    "content-post",
+    "user-self",
+    "user-subscriptions"
+  ],
+  "promoteBaselines": false
+}

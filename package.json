@@ -22,7 +22,10 @@
     "frontend-monitor": "node tools/fp-frontend-watch/monitor-orchestrate.mjs",
     "frontend-monitor-json": "node tools/fp-frontend-watch/monitor-orchestrate.mjs --json",
     "frontend-evidence-test": "node --test tests/frontend-evidence/frontend-evidence.test.mjs",
-    "frontend-evidence": "node tools/fp-frontend-evidence/cli.mjs extract"
+    "frontend-evidence": "node tools/fp-frontend-evidence/cli.mjs extract",
+    "api-shape-test": "node --test tests/api-shape-canary/api-shape-canary.test.mjs",
+    "api-shape-capture": "node tools/fp-api-shape-canary/cli.mjs capture",
+    "api-shape-device-login": "node tools/fp-api-shape-canary/cli.mjs device-login"
   },
   "repository": {
     "type": "git",

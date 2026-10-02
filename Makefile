@@ -14,6 +14,8 @@ help:
 	@echo "frontend-evidence-test frontend-evidence"
 	@echo "frontend-evidence-diff-test frontend-evidence-diff frontend-evidence-diff-latest"
 	@echo "frontend-phase2-orch-test"
+	@echo "api-shape-test api-shape-device-login api-shape-capture api-shape-unauth-list"
+	@echo "api-shape-diff-trees"
 
 # Section: Helpers and structural
 
@@ -90,6 +92,26 @@ frontend-evidence-diff:
 # Convenience: two most recent complete inventories (fails clearly if fewer than two)
 frontend-evidence-diff-latest:
 	node tools/fp-frontend-evidence/cli.mjs diff-latest
+
+# Phase 3.0: authenticated API response-shape canary (Keycloak device flow; separate from Phase 1/2)
+# Live capture gated on FP_ACCESS_TOKEN or state/api-shape-token.local — never invent tokens.
+api-shape-test:
+	node --test tests/api-shape-canary/api-shape-canary.test.mjs
+
+api-shape-device-login:
+	node tools/fp-api-shape-canary/cli.mjs device-login
+
+api-shape-capture:
+	node tools/fp-api-shape-canary/cli.mjs capture
+
+api-shape-unauth-list:
+	node tools/fp-api-shape-canary/cli.mjs unauth-list
+
+# Usage: make api-shape-diff-trees FROM=path/to/a.schema.json TO=path/to/b.schema.json
+api-shape-diff-trees:
+	@test -n "$(FROM)" || (echo 'FROM=<schema.json> required' >&2; exit 1)
+	@test -n "$(TO)" || (echo 'TO=<schema.json> required' >&2; exit 1)
+	node tools/fp-api-shape-canary/cli.mjs diff-trees --from $(FROM) --to $(TO)
 
 # Section: Trimmed docs
 
