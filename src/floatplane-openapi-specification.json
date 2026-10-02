@@ -731,7 +731,7 @@
 									"ivshls",
 									"lldash"
 								],
-								"description": "- `llhls`: \ud83c\udf4e-backed low-latency HLS extension.\n- `clhls`: Community-backed low-latency HLS extension.\n- `ivshls`: IVS custom low-latency HLS extension.\n- `lldash`: DASH-IF-backed low-Latency DASH extension."
+								"description": "- `llhls`: 🍎-backed low-latency HLS extension.\n- `clhls`: Community-backed low-latency HLS extension.\n- `ivshls`: IVS custom low-latency HLS extension.\n- `lldash`: DASH-IF-backed low-Latency DASH extension."
 							}
 						}
 					}
@@ -1362,6 +1362,19 @@
 						"type": "array",
 						"description": "May be undefined when the post is locked.",
 						"items": {}
+					},
+					"textMarkdown": {
+						"type": "string",
+						"description": "Markdown body companion to text. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
+					},
+					"selfUserInteraction": {
+						"type": "string",
+						"nullable": true,
+						"enum": [
+							"like",
+							"dislike"
+						],
+						"description": "Viewer's own interaction on this post, or null. Frontend maps via UserInteractionEnumFromJSON. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
 					}
 				},
 				"required": [
@@ -1762,6 +1775,24 @@
 						"type": "string",
 						"format": "date-time",
 						"nullable": true
+					},
+					"badges": {
+						"type": "array",
+						"items": {},
+						"description": "Account badges array (item shape not fully expanded in canary sample). Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
+					},
+					"isModerator": {
+						"type": "boolean",
+						"description": "Whether the user is a moderator. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
+					},
+					"isGlobalModerator": {
+						"type": "boolean",
+						"description": "Whether the user is a global moderator. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
+					},
+					"moderatorCreators": {
+						"type": "array",
+						"items": {},
+						"description": "Creators for which the user moderates (item shape not fully expanded in canary sample). Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
 					}
 				},
 				"required": [
@@ -2072,6 +2103,19 @@
 					},
 					"defaultChannel": {
 						"type": "string"
+					},
+					"card": {
+						"nullable": true,
+						"allOf": [
+							{
+								"$ref": "#/components/schemas/ImageModel"
+							}
+						],
+						"description": "Creator card image (may be null). Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
+					},
+					"visibility": {
+						"type": "string",
+						"description": "Creator visibility flag observed on nested creator objects. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
 					}
 				},
 				"required": [
@@ -2525,6 +2569,19 @@
 						"items": {
 							"type": "string"
 						}
+					},
+					"textMarkdown": {
+						"type": "string",
+						"description": "Markdown body companion to text (list + detail). Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
+					},
+					"selfUserInteraction": {
+						"type": "string",
+						"nullable": true,
+						"enum": [
+							"like",
+							"dislike"
+						],
+						"description": "Viewer's own interaction, or null. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
 					}
 				},
 				"required": [
@@ -2592,6 +2649,22 @@
 						"items": {
 							"$ref": "#/components/schemas/DiscordRoleModel"
 						}
+					},
+					"creator": {
+						"type": "string",
+						"description": "Creator id for this plan. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
+					},
+					"enabled": {
+						"type": "boolean",
+						"description": "Whether the plan is enabled. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
+					},
+					"enabledGlobal": {
+						"type": "boolean",
+						"description": "Whether the plan is enabled globally. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
+					},
+					"published": {
+						"type": "boolean",
+						"description": "Whether the plan is published. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
 					}
 				},
 				"required": [
@@ -2641,6 +2714,10 @@
 					},
 					"isFeatured": {
 						"type": "boolean"
+					},
+					"displayDuration": {
+						"type": "number",
+						"description": "Duration used for UI display (seconds). Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
 					}
 				},
 				"required": [
@@ -2702,6 +2779,97 @@
 					"isAccessible": {
 						"type": "boolean",
 						"description": "If false, the post should be marked as locked and not viewable by the user."
+					},
+					"levels": {
+						"type": "array",
+						"description": "Available progressive/quality levels. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b).",
+						"items": {
+							"type": "object",
+							"required": [
+								"name",
+								"width",
+								"height",
+								"label",
+								"order"
+							],
+							"properties": {
+								"name": {
+									"type": "string"
+								},
+								"width": {
+									"type": "integer"
+								},
+								"height": {
+									"type": "integer"
+								},
+								"label": {
+									"type": "string"
+								},
+								"order": {
+									"type": "integer"
+								}
+							}
+						}
+					},
+					"textTracks": {
+						"type": "array",
+						"description": "Caption/subtitle tracks. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b).",
+						"items": {
+							"type": "object",
+							"required": [
+								"id",
+								"language",
+								"kind",
+								"src",
+								"generated",
+								"processing"
+							],
+							"properties": {
+								"id": {
+									"type": "string"
+								},
+								"language": {
+									"type": "string"
+								},
+								"kind": {
+									"type": "string"
+								},
+								"src": {
+									"type": "string"
+								},
+								"generated": {
+									"type": "boolean"
+								},
+								"processing": {
+									"type": "boolean"
+								}
+							}
+						}
+					},
+					"timelineSprite": {
+						"nullable": true,
+						"allOf": [
+							{
+								"$ref": "#/components/schemas/ImageModel"
+							}
+						],
+						"description": "Seek preview sprite sheet image, if present. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
+					},
+					"blogPosts": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Related blog post ids. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
+					},
+					"selfUserInteraction": {
+						"type": "string",
+						"nullable": true,
+						"enum": [
+							"like",
+							"dislike"
+						],
+						"description": "Viewer's interaction on this video attachment, or null. Observed 2026-10-02 via authenticated Phase 3.0 canary (artifacts/api-shape/baselines) and frontend BlogPostContentInfo/VideoContentInfo mappers (build 4.5.22-316-d74397b)."
 					}
 				},
 				"required": [
