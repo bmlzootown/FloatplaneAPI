@@ -1,0 +1,39 @@
+{
+  "endpointId": "user-self",
+  "sanitizedAt": "2026-10-02T16:23:51.396Z",
+  "redaction": "titles/text/markdown/email/username/displayName/paymentIds/cdn-paths/ids",
+  "value": {
+    "id": "000000000000000000000000",
+    "username": "example_user",
+    "badges": [
+      "000000000000000000000000",
+      "000000000000000000000000",
+      "000000000000000000000000"
+    ],
+    "profileImage": {
+      "width": 720,
+      "height": 720,
+      "path": "https://cdn.example.invalid/redacted.jpg",
+      "childImages": [
+        {
+          "width": 100,
+          "height": 100,
+          "path": "https://cdn.example.invalid/redacted.jpg"
+        },
+        {
+          "width": 250,
+          "height": 250,
+          "path": "https://cdn.example.invalid/redacted.jpg"
+        }
+      ]
+    },
+    "email": "user@example.invalid",
+    "displayName": "Example User",
+    "creators": [],
+    "isModerator": true,
+    "isGlobalModerator": false,
+    "moderatorCreators": [
+      "000000000000000000000000"
+    ]
+  }
+}

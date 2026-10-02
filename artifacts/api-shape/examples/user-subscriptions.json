@@ -1,0 +1,32 @@
+{
+  "endpointId": "user-subscriptions",
+  "sanitizedAt": "2026-10-02T16:23:51.396Z",
+  "redaction": "titles/text/markdown/email/username/displayName/paymentIds/cdn-paths/ids",
+  "value": [
+    {
+      "startDate": "2025-07-07T23:02:07.673Z",
+      "endDate": "2033-10-07T23:02:07.673Z",
+      "paymentID": null,
+      "interval": "external",
+      "paymentCancelled": null,
+      "plan": {
+        "id": "000000000000000000000000",
+        "title": "Example title (redacted)",
+        "description": "Example description (redacted).",
+        "price": "5.00",
+        "priceYearly": "50.00",
+        "currency": "usd",
+        "creator": "000000000000000000000000",
+        "logo": null,
+        "featured": false,
+        "allowGrandfatheredAccess": false,
+        "discordServers": [],
+        "discordRoles": [],
+        "enabled": true,
+        "published": true,
+        "enabledGlobal": true
+      },
+      "creator": "000000000000000000000000"
+    }
+  ]
+}

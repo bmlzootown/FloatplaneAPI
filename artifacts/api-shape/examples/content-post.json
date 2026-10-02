@@ -1,0 +1,224 @@
+{
+  "endpointId": "content-post",
+  "sanitizedAt": "2026-10-02T16:23:51.392Z",
+  "redaction": "titles/text/markdown/email/username/displayName/paymentIds/cdn-paths/ids",
+  "value": {
+    "id": "example-id-redacted",
+    "guid": "example-id-redacted",
+    "title": "Example title (redacted)",
+    "text": "Example post body (redacted).",
+    "textMarkdown": "Example post body (**redacted**).",
+    "type": "blogPost",
+    "channel": {
+      "id": "000000000000000000000000",
+      "creator": "000000000000000000000000",
+      "title": "Example title (redacted)",
+      "urlname": "gamelinked",
+      "about": "Example about text (redacted).",
+      "order": 5,
+      "cover": null,
+      "card": null,
+      "icon": {
+        "width": 720,
+        "height": 720,
+        "path": "https://cdn.example.invalid/redacted.jpg",
+        "childImages": [
+          {
+            "width": 100,
+            "height": 100,
+            "path": "https://cdn.example.invalid/redacted.jpg"
+          },
+          {
+            "width": 250,
+            "height": 250,
+            "path": "https://cdn.example.invalid/redacted.jpg"
+          }
+        ]
+      }
+    },
+    "tags": [],
+    "attachmentOrder": [
+      "example-id-redacted"
+    ],
+    "releaseDate": "2026-10-02T00:37:00.028Z",
+    "likes": 111,
+    "dislikes": 0,
+    "score": 111,
+    "comments": 11,
+    "creator": {
+      "id": "000000000000000000000000",
+      "owner": "000000000000000000000000",
+      "title": "Example title (redacted)",
+      "urlname": "linustechtips",
+      "description": "Example description (redacted).",
+      "about": "Example about text (redacted).",
+      "category": "59f94c0bdd241b70349eb727",
+      "cover": null,
+      "icon": {
+        "width": 600,
+        "height": 600,
+        "path": "https://cdn.example.invalid/redacted.jpg",
+        "childImages": [
+          {
+            "width": 250,
+            "height": 250,
+            "path": "https://cdn.example.invalid/redacted.jpg"
+          },
+          {
+            "width": 100,
+            "height": 100,
+            "path": "https://cdn.example.invalid/redacted.jpg"
+          }
+        ]
+      },
+      "card": null,
+      "liveStream": null,
+      "subscriptionPlans": null,
+      "discoverable": true,
+      "visibility": "public",
+      "subscriberCountDisplay": "total",
+      "incomeDisplay": false,
+      "defaultChannel": "6413623f5b12cca228a28e78"
+    },
+    "wasReleasedSilently": false,
+    "metadata": {
+      "hasVideo": true,
+      "videoCount": 1,
+      "videoDuration": 445,
+      "hasAudio": false,
+      "audioCount": 0,
+      "audioDuration": 0,
+      "hasPicture": false,
+      "pictureCount": 0,
+      "isFeatured": false,
+      "displayDuration": 445,
+      "hasGallery": false,
+      "galleryCount": 0
+    },
+    "galleryAttachments": [],
+    "selfUserInteraction": null,
+    "thumbnail": {
+      "width": 1920,
+      "height": 1080,
+      "path": "https://cdn.example.invalid/redacted.jpg",
+      "childImages": [
+        {
+          "width": 400,
+          "height": 225,
+          "path": "https://cdn.example.invalid/redacted.jpg"
+        },
+        {
+          "width": 1200,
+          "height": 675,
+          "path": "https://cdn.example.invalid/redacted.jpg"
+        },
+        {
+          "width": 1920,
+          "height": 1080,
+          "path": "https://cdn.example.invalid/redacted.jpg"
+        }
+      ]
+    },
+    "isAccessible": true,
+    "userInteraction": [],
+    "videoAttachments": [
+      {
+        "id": "example-id-redacted",
+        "guid": "example-id-redacted",
+        "title": "Example title (redacted)",
+        "type": "video",
+        "description": "Example description (redacted).",
+        "releaseDate": null,
+        "duration": 445,
+        "creator": "000000000000000000000000",
+        "likes": 0,
+        "dislikes": 0,
+        "score": 0,
+        "isProcessing": false,
+        "primaryBlogPost": "example-id-redacted",
+        "levels": [
+          {
+            "name": "example",
+            "width": 640,
+            "height": 360,
+            "label": "example",
+            "order": 0
+          },
+          {
+            "name": "example",
+            "width": 854,
+            "height": 480,
+            "label": "example",
+            "order": 1
+          },
+          {
+            "name": "example",
+            "width": 1280,
+            "height": 720,
+            "label": "example",
+            "order": 2
+          },
+          {
+            "name": "example",
+            "width": 1920,
+            "height": 1080,
+            "label": "example",
+            "order": 4
+          },
+          {
+            "name": "example",
+            "width": 3840,
+            "height": 2160,
+            "label": "example",
+            "order": 7
+          }
+        ],
+        "textTracks": [
+          {
+            "id": "000000000000000000000000",
+            "src": "https://cdn.example.invalid/redacted.jpg",
+            "kind": "captions",
+            "language": "en",
+            "generated": true,
+            "processing": false
+          }
+        ],
+        "selfUserInteraction": null,
+        "thumbnail": {
+          "width": 1920,
+          "height": 1080,
+          "path": "https://cdn.example.invalid/redacted.jpg",
+          "childImages": [
+            {
+              "width": 400,
+              "height": 225,
+              "path": "https://cdn.example.invalid/redacted.jpg"
+            },
+            {
+              "width": 1920,
+              "height": 1080,
+              "path": "https://cdn.example.invalid/redacted.jpg"
+            },
+            {
+              "width": 1200,
+              "height": 675,
+              "path": "https://cdn.example.invalid/redacted.jpg"
+            }
+          ]
+        },
+        "isAccessible": true,
+        "blogPosts": [
+          "example-id-redacted"
+        ],
+        "timelineSprite": {
+          "width": 35680,
+          "height": 90,
+          "path": "https://cdn.example.invalid/redacted.jpg",
+          "childImages": []
+        }
+      }
+    ],
+    "audioAttachments": [],
+    "pictureAttachments": []
+  }
+}

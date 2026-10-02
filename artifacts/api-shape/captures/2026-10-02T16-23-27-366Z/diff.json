@@ -1,0 +1,44 @@
+{
+  "byEndpoint": {
+    "content-creator": {
+      "added": [],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 73,
+      "hasDrift": false
+    },
+    "content-post": {
+      "added": [],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 142,
+      "hasDrift": false
+    },
+    "content-video": {
+      "added": [
+        "$"
+      ],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 0,
+      "hasDrift": false,
+      "note": "no prior baseline for endpoint"
+    },
+    "user-self": {
+      "added": [],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 22,
+      "hasDrift": false
+    },
+    "user-subscriptions": {
+      "added": [],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 26,
+      "hasDrift": false
+    }
+  },
+  "hasDrift": false,
+  "firstCapture": false
+}

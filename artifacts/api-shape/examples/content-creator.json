@@ -1,0 +1,124 @@
+{
+  "endpointId": "content-creator",
+  "sanitizedAt": "2026-10-02T16:23:51.387Z",
+  "redaction": "titles/text/markdown/email/username/displayName/paymentIds/cdn-paths/ids",
+  "value": [
+    {
+      "id": "example-id-redacted",
+      "guid": "example-id-redacted",
+      "title": "Example title (redacted)",
+      "text": "Example post body (redacted).",
+      "textMarkdown": "Example post body (**redacted**).",
+      "type": "blogPost",
+      "tags": [],
+      "releaseDate": "2026-10-02T00:37:00.028Z",
+      "likes": 111,
+      "dislikes": 0,
+      "score": 111,
+      "comments": 11,
+      "isAccessible": true,
+      "metadata": {
+        "hasVideo": true,
+        "videoCount": 1,
+        "videoDuration": 445,
+        "hasAudio": false,
+        "audioCount": 0,
+        "audioDuration": 0,
+        "hasPicture": false,
+        "pictureCount": 0,
+        "isFeatured": false,
+        "displayDuration": 445,
+        "hasGallery": false,
+        "galleryCount": 0
+      },
+      "selfUserInteraction": null,
+      "thumbnail": {
+        "width": 1920,
+        "height": 1080,
+        "path": "https://cdn.example.invalid/redacted.jpg",
+        "childImages": [
+          {
+            "width": 400,
+            "height": 225,
+            "path": "https://cdn.example.invalid/redacted.jpg"
+          },
+          {
+            "width": 1200,
+            "height": 675,
+            "path": "https://cdn.example.invalid/redacted.jpg"
+          },
+          {
+            "width": 1920,
+            "height": 1080,
+            "path": "https://cdn.example.invalid/redacted.jpg"
+          }
+        ]
+      },
+      "creator": {
+        "id": "000000000000000000000000",
+        "title": "Example title (redacted)",
+        "urlname": "linustechtips",
+        "description": "Example description (redacted).",
+        "about": "Example about text (redacted).",
+        "category": {
+          "id": "000000000000000000000000",
+          "title": "Example title (redacted)"
+        },
+        "icon": {
+          "width": 600,
+          "height": 600,
+          "path": "https://cdn.example.invalid/redacted.jpg",
+          "childImages": [
+            {
+              "width": 250,
+              "height": 250,
+              "path": "https://cdn.example.invalid/redacted.jpg"
+            },
+            {
+              "width": 100,
+              "height": 100,
+              "path": "https://cdn.example.invalid/redacted.jpg"
+            }
+          ]
+        },
+        "channels": [
+          "63fe42c309e691e4e36de93d",
+          "65eba4d7788cf21d40c30f57",
+          "64135f82fc76ab7f9fbdc876",
+          "649dbade3540dbc3945eeda7",
+          "654195b7dc8d232e5ca0971d",
+          "64135ed078d6262f717341b7",
+          "64135e901ebaee42e258eb0b",
+          "6413623f5b12cca228a28e78",
+          "6413534d88c13c181c3e2809",
+          "64135da7ce81077a8480c679",
+          "64135e27c773b27ff22c97eb",
+          "64b9a4831786c66485efeb01"
+        ]
+      },
+      "channel": {
+        "id": "000000000000000000000000",
+        "title": "Example title (redacted)",
+        "urlname": "gamelinked",
+        "about": "Example about text (redacted).",
+        "icon": {
+          "width": 720,
+          "height": 720,
+          "path": "https://cdn.example.invalid/redacted.jpg",
+          "childImages": [
+            {
+              "width": 100,
+              "height": 100,
+              "path": "https://cdn.example.invalid/redacted.jpg"
+            },
+            {
+              "width": 250,
+              "height": 250,
+              "path": "https://cdn.example.invalid/redacted.jpg"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

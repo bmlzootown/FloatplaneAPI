@@ -76,8 +76,12 @@ function redactString(key, value, pathParts) {
     if (/^[0-9a-f-]{36}$/i.test(value)) return '00000000-0000-4000-8000-000000000000';
     if (value.length >= 8) return PLACEHOLDERS.id;
   }
-  // Array of blog post ids etc.
-  if (pathParts.some((p) => p === 'blogPosts' || p === 'attachmentOrder' || p === 'creators')) {
+  // Array of blog post ids, badge ids, moderator creator ids, attachment order, etc.
+  if (
+    pathParts.some((p) =>
+      ['blogPosts', 'attachmentOrder', 'creators', 'badges', 'moderatorCreators'].includes(p),
+    )
+  ) {
     if (/^[a-f0-9]{24}$/i.test(value)) return '000000000000000000000000';
     if (value.length >= 8) return PLACEHOLDERS.id;
   }
