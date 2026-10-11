@@ -1,0 +1,1 @@
+import{x as t}from"./index-DaEmRTqt.js";function v({controlled:e,default:s,name:c,state:f="value"}){const{current:a}=t.useRef(e!==void 0),[u,o]=t.useState(s),n=a&&e!==void 0?e:u,l=t.useCallback(r=>{a||o(r)},[]);return[n,l]}export{v as u};
