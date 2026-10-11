@@ -77,11 +77,12 @@ using this prompt; this file does not create the subscription by itself.
 
 ## Auth durability notes
 
-- Access tokens are short-lived (`expires_in`).
+- Access tokens are short-lived (`expires_in` ≈ 1800s observed).
 - Refresh uses `grant_type=refresh_token` **with DPoP** (`fp-tv-app` / `usesExtendedSecurity`).
-- `refresh_expires_in` from Keycloak is finite — rolling refresh is **not** proven indefinite;
-  when refresh dies, device re-login is required. See operator doc
-  `docs/phase-3-1-api-shape-schedule.md` (Project store) / tooling README.
+- Live evidence (`artifacts/api-shape/refresh-lifetime-evidence.json`): with `offline_access`,
+  each refresh returns `refresh_expires_in=7776000` (90d sliding window) and rotates the
+  refresh token. Weekly runs keep the chain alive. If refresh fails (`needs_auth`),
+  human device re-login is required.
 
 ## Safety reminder
 

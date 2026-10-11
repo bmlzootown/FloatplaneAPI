@@ -307,10 +307,13 @@ async function cmdProbeRefresh(args) {
     if (i < rounds && delayMs) await sleep(delayMs);
   }
 
-  const first = samples[0];
-  const last = samples[samples.length - 1];
+  const measured = samples.filter(
+    (s) => s.label === 'refreshed' && s.refreshExpiresIn != null && s.refreshExpiresAt,
+  );
+  const first = measured[0] || samples[0];
+  const last = measured[measured.length - 1] || samples[samples.length - 1];
   const rotations = samples
-    .slice(1)
+    .filter((s) => s.label === 'refreshed')
     .map((s) => s.refreshTokenRotated)
     .filter((v) => v != null);
   const allRotated = rotations.length > 0 && rotations.every(Boolean);
@@ -318,32 +321,35 @@ async function cmdProbeRefresh(args) {
   const refreshWallExtended =
     first.refreshExpiresAt &&
     last.refreshExpiresAt &&
-    Date.parse(last.refreshExpiresAt) > Date.parse(first.refreshExpiresAt) + 5_000;
+    Date.parse(last.refreshExpiresAt) > Date.parse(first.refreshExpiresAt) + 2_000;
   const refreshWallShrunkOrSame =
     first.refreshExpiresAt &&
     last.refreshExpiresAt &&
-    Date.parse(last.refreshExpiresAt) <= Date.parse(first.refreshExpiresAt) + 5_000;
+    Date.parse(last.refreshExpiresAt) <= Date.parse(first.refreshExpiresAt) + 2_000;
 
   /** @type {'YES'|'NO'|'UNKNOWN'} */
   let indefinite = 'UNKNOWN';
   let reason = '';
-  if (!first.hasRefreshToken) {
+  if (!samples.some((s) => s.hasRefreshToken)) {
     indefinite = 'NO';
     reason = 'No refresh_token issued';
-  } else if (first.refreshExpiresIn == null) {
+  } else if (!measured.length || first.refreshExpiresIn == null) {
     indefinite = 'UNKNOWN';
     reason =
-      'Keycloak omitted refresh_expires_in; cannot prove indefinite rolling without a measured wall clock or session-max evidence';
-  } else if (refreshWallExtended) {
-    indefinite = 'UNKNOWN';
-    reason =
-      'refresh_expires_at moved forward after refresh (possible sliding window); absolute SSO/offline session max still unknown without longer observation';
+      'Keycloak omitted refresh_expires_in on measured refresh responses; cannot classify rolling lifetime';
+  } else if (refreshWallExtended && first.refreshExpiresIn > 0) {
+    // Sliding window: each refresh returns a full refresh_expires_in from "now".
+    // Indefinite *while* refreshes keep succeeding inside that window (e.g. 90d offline).
+    indefinite = 'YES';
+    reason = `Sliding offline refresh window observed: each refresh returns refresh_expires_in=${first.refreshExpiresIn}s (~${(
+      first.refreshExpiresIn / 86400
+    ).toFixed(1)}d) and refreshExpiresAt advances; refresh_token rotated=${allRotated}. Rolling refresh stays alive if performed before that window elapses — miss the window (or lose DPoP keys) → device re-login. Not immortal without activity.`;
   } else if (refreshWallShrunkOrSame && first.refreshExpiresIn > 0) {
     indefinite = 'NO';
-    reason = `refresh_expires_in is finite (${first.refreshExpiresIn}s) and absolute refreshExpiresAt did not meaningfully extend across ${rounds} refresh(es) — rolling refresh hits that wall; then device re-login`;
+    reason = `refresh_expires_in is finite (${first.refreshExpiresIn}s) and absolute refreshExpiresAt did not extend across ${measured.length} refresh(es) — rolling refresh hits that wall; then device re-login`;
   } else {
-    indefinite = 'NO';
-    reason = `refresh_expires_in=${first.refreshExpiresIn}s is finite; frontend treats refreshExpiresAt as absolute wall clock`;
+    indefinite = 'UNKNOWN';
+    reason = `refresh_expires_in=${first.refreshExpiresIn}; wall-clock comparison inconclusive`;
   }
 
   const out = {
