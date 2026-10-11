@@ -1,5 +1,8 @@
-import { describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdir, rm, writeFile, readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   accessNeedsRefresh,
   normalizeTokenResponse,
@@ -7,12 +10,72 @@ import {
   refreshIsExpired,
 } from '../../tools/fp-api-shape-canary/lib/auth-refresh.mjs';
 import {
+  persistAuthToStore,
+  restoreAuthFromStore,
+} from '../../tools/fp-api-shape-canary/lib/auth-store.mjs';
+import {
   decideShapeMonitorAction,
   formatShapePrBody,
 } from '../../tools/fp-api-shape-canary/lib/schedule-decision.mjs';
 import { refreshAccessToken } from '../../tools/fp-api-shape-canary/lib/auth-refresh.mjs';
 import { EXIT, OIDC, SHAPE_MONITOR_BRANCH } from '../../tools/fp-api-shape-canary/lib/constants.mjs';
 import { generateDpopKeyPair } from '../../tools/fp-api-shape-canary/lib/dpop.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const AUTH_STORE_TMP = path.join(__dirname, '.tmp-auth-store');
+
+before(async () => {
+  await rm(AUTH_STORE_TMP, { recursive: true, force: true });
+  await mkdir(AUTH_STORE_TMP, { recursive: true });
+});
+
+after(async () => {
+  await rm(AUTH_STORE_TMP, { recursive: true, force: true });
+});
+
+describe('auth-store restore/persist', () => {
+  it('restores from store when local missing and persists back', async () => {
+    const store = path.join(AUTH_STORE_TMP, 'store.json');
+    const local = path.join(AUTH_STORE_TMP, 'local.json');
+    await writeFile(store, `${JSON.stringify({ accessToken: 'seed', refreshToken: 'r' })}\n`, {
+      mode: 0o600,
+    });
+
+    const skipped = await restoreAuthFromStore({
+      authFile: local,
+      env: {},
+    });
+    assert.equal(skipped.restored, false);
+    assert.equal(skipped.reason, 'no-store');
+
+    const restored = await restoreAuthFromStore({
+      authFile: local,
+      storePath: store,
+      env: {},
+    });
+    assert.equal(restored.restored, true);
+    assert.equal(JSON.parse(await readFile(local, 'utf8')).accessToken, 'seed');
+
+    const noop = await restoreAuthFromStore({
+      authFile: local,
+      storePath: store,
+      env: {},
+    });
+    assert.equal(noop.restored, false);
+    assert.equal(noop.reason, 'local-exists');
+
+    await writeFile(local, `${JSON.stringify({ accessToken: 'rotated', refreshToken: 'r2' })}\n`, {
+      mode: 0o600,
+    });
+    const persisted = await persistAuthToStore({
+      authFile: local,
+      storePath: store,
+      env: {},
+    });
+    assert.equal(persisted.persisted, true);
+    assert.equal(JSON.parse(await readFile(store, 'utf8')).accessToken, 'rotated');
+  });
+});
 
 describe('auth-refresh lifetimes', () => {
   it('normalizes refresh_expires_in into absolute wall clock', () => {
