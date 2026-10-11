@@ -1,11 +1,11 @@
-# fp-api-shape-canary (Phase 3.0)
+# fp-api-shape-canary (Phase 3.1)
 
-Manual / human-approved **authenticated** REST response-shape canary for Floatplane.
+Manual + **scheduled** **authenticated** REST response-shape canary for Floatplane.
 
 Detects structural drift (added / removed / type-changed JSON paths) on a fixed
 read-only allowlist centered on `GET /api/v3/content/post`. Separate lane from
 Phase 1/2 frontend watch — does **not** change the 6h Automation schedule or
-`PROMPT.md`.
+`tools/fp-frontend-watch/automation/PROMPT.md`.
 
 ## Auth (Keycloak device flow)
 
@@ -21,17 +21,24 @@ Evidence-backed public OIDC defaults (do not invent clients):
 | DPoP | ES256 proof on token + REST | Frontend `USE_DPOP` / `usesExtendedSecurity:!0` |
 
 REST probes use DPoP-bound access tokens (`Authorization: DPoP …` + `DPoP` proof).
-Never commit secrets. Default auth file `state/api-shape-auth.local.json` is gitignored
-(includes access token + DPoP private JWK). Bare `state/api-shape-token.local` alone is
-not enough for live `fp-tv-app` APIs.
+Refresh also requires DPoP (`grant_type=refresh_token`). Never commit secrets.
+Default auth file `state/api-shape-auth.local.json` is gitignored (access + refresh +
+DPoP private JWK). Bare `state/api-shape-token.local` alone is not enough for live
+`fp-tv-app` APIs.
 
 ```sh
-# Human approves the device code in a browser
-make api-shape-device-login
+# Human approves the device code in a browser (prefer offline_access for schedule)
+make api-shape-device-login SCOPE="openid offline_access"
 # → writes state/api-shape-auth.local.json (0600)
 
+make api-shape-ensure-auth      # refresh if access near expiry
+make api-shape-probe-refresh    # redacted rolling-refresh lifetime evidence
 make api-shape-capture
+make api-shape-schedule-json    # capture → diff → decision JSON
 ```
+
+Scheduled Automation prompt: `automation/PROMPT.md` (coordinator attaches timer;
+suggested cron `0 3 * * 1`).
 
 ## Allowlist (read-only)
 
@@ -63,14 +70,20 @@ Field trees store **keys + JSON types + nullability only** — not titles, text,
 ## Commands
 
 ```sh
-make api-shape-test                 # offline unit tests
+make api-shape-test                 # offline unit tests (canary + schedule)
 make api-shape-device-login         # interactive Keycloak device flow
-make api-shape-capture              # gated on FP_ACCESS_TOKEN or token file
+make api-shape-refresh              # force refresh_token grant
+make api-shape-ensure-auth           # refresh if needed
+make api-shape-probe-refresh        # rolling-refresh evidence (redacted)
+make api-shape-capture              # gated on auth file / FP_ACCESS_TOKEN
+make api-shape-schedule-json         # Phase 3.1 orchestrator decision JSON
 make api-shape-unauth-list           # no secrets
 make api-shape-diff-trees FROM=… TO=…
 ```
 
-Exit codes: `0` ok · `1` failure · `2` structural drift · `3` needs human auth.
+Exit codes: `0` ok / noop · `1` failure · `2` structural drift · `3` needs human auth.
+
+Schedule decision actions: `noop` · `open_shape_pr` · `update_shape_pr` · `needs_auth` · `report_failure`.
 
 ## First baseline (operator)
 

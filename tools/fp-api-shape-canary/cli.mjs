@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 /**
- * Phase 3.0 — authenticated API response-shape canary CLI
+ * Phase 3.1 — authenticated API response-shape canary CLI
  *
  * Commands:
- *   device-login   Keycloak OIDC device flow (human approves); writes token file
- *   capture        Allowlisted GETs → field-tree capture + structural diff
- *   diff-trees     Offline structural diff of two .schema.json trees
- *   unauth-list    Companion: unauthenticated GET /api/v3/content/creator field tree
+ *   device-login     Keycloak OIDC device flow (human approves); writes auth session
+ *   refresh          Force refresh_token grant (DPoP); update local auth file
+ *   ensure-auth      Refresh if access near expiry; exit 3 if re-login needed
+ *   probe-refresh    Rolling-refresh evidence (redacted lifetimes only)
+ *   capture          Allowlisted GETs → field-tree capture + structural diff
+ *   diff-trees       Offline structural diff of two .schema.json trees
+ *   unauth-list      Companion: unauthenticated GET /api/v3/content/creator field tree
  *
  * Exit codes:
  *   0 success / no drift
@@ -19,7 +22,7 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import {
   DEFAULT_ARTIFACTS_ROOT,
   DEFAULT_AUTH_FILE,
@@ -29,10 +32,12 @@ import {
   TOOL_ID,
   TOOL_VERSION,
 } from './lib/constants.mjs';
+import { redactAuthLifetime } from './lib/auth-refresh.mjs';
 import { discoverOidc, requestDeviceAuthorization, pollDeviceToken } from './lib/device-flow.mjs';
 import { generateDpopKeyPair } from './lib/dpop.mjs';
 import { diffFieldTrees, formatDiffReportMarkdown } from './lib/diff.mjs';
 import {
+  ensureAuthSession,
   resolveAuthSession,
   runCapture,
   writeAuthFile,
@@ -52,6 +57,14 @@ async function main(argv) {
   try {
     if (args.command === 'device-login') {
       await cmdDeviceLogin(args);
+      return;
+    }
+    if (args.command === 'refresh' || args.command === 'ensure-auth') {
+      await cmdEnsureAuth(args, { forceRefresh: args.command === 'refresh' || args.forceRefresh });
+      return;
+    }
+    if (args.command === 'probe-refresh') {
+      await cmdProbeRefresh(args);
       return;
     }
     if (args.command === 'capture') {
@@ -166,7 +179,13 @@ async function cmdDeviceLogin(args) {
     accessToken: token.accessToken,
     refreshToken: token.refreshToken,
     expiresIn: token.expiresIn,
+    refreshExpiresIn: token.refreshExpiresIn,
+    accessExpiresAtMs: token.accessExpiresAtMs,
+    refreshExpiresAtMs: token.refreshExpiresAtMs,
+    obtainedAtMs: token.obtainedAtMs,
     scope: token.scope,
+    sessionState: token.sessionState,
+    responseKeys: token.responseKeys,
     dpopKeyPair: token.dpopKeyPair,
   });
   const tokenFile = path.resolve(REPO_ROOT, args.tokenFile || DEFAULT_TOKEN_FILE);
@@ -174,8 +193,12 @@ async function cmdDeviceLogin(args) {
   console.error(`Auth session written to ${authFile} (gitignored; mode 0600; includes DPoP keys).`);
   console.error(`Access token also at ${tokenFile} (gitignored; alone is insufficient for live DPoP APIs).`);
   console.error('Do NOT commit these files.');
+  const lifetime = redactAuthLifetime(token, { label: 'device-login' });
+  console.error(
+    `Lifetime: expires_in=${lifetime.expiresIn}s refresh_expires_in=${lifetime.refreshExpiresIn}s refreshExpiresAt=${lifetime.refreshExpiresAt}`,
+  );
   console.error('');
-  console.error('Next: make api-shape-capture');
+  console.error('Next: make api-shape-capture  (or make api-shape-probe-refresh)');
 
   if (args.json) {
     console.log(
@@ -184,9 +207,7 @@ async function cmdDeviceLogin(args) {
           ok: true,
           authFile,
           tokenFile,
-          expiresIn: token.expiresIn,
-          scope: token.scope,
-          hasRefreshToken: Boolean(token.refreshToken),
+          lifetime,
           dpop: true,
         },
         null,
@@ -194,6 +215,172 @@ async function cmdDeviceLogin(args) {
       ),
     );
   }
+  process.exit(EXIT.SUCCESS);
+}
+
+/** @param {ReturnType<typeof parseArgs>} args */
+async function cmdEnsureAuth(args, { forceRefresh }) {
+  const tokenFile = path.resolve(REPO_ROOT, args.tokenFile || DEFAULT_TOKEN_FILE);
+  const authFile = path.resolve(REPO_ROOT, args.authFile || DEFAULT_AUTH_FILE);
+  const result = await ensureAuthSession({
+    token: args.token || null,
+    tokenFile,
+    authFile,
+    forceRefresh,
+  });
+  if (args.json) {
+    console.log(
+      JSON.stringify(
+        {
+          ok: result.ok,
+          exitCode: result.exitCode,
+          refreshed: result.refreshed,
+          lifetime: result.lifetime,
+          error: result.error,
+          notes: result.notes,
+        },
+        null,
+        2,
+      ),
+    );
+  } else {
+    console.log(`${TOOL_ID} ensure-auth ok=${result.ok} refreshed=${result.refreshed}`);
+    if (result.lifetime) {
+      console.log(
+        `lifetime: expires_in=${result.lifetime.expiresIn} refresh_expires_in=${result.lifetime.refreshExpiresIn} refreshExpiresAt=${result.lifetime.refreshExpiresAt} rotated=${result.lifetime.refreshTokenRotated}`,
+      );
+    }
+    for (const n of result.notes || []) console.log(`note: ${n}`);
+    if (result.error) console.error(`error: ${result.error}`);
+  }
+  process.exit(result.exitCode);
+}
+
+/**
+ * Rolling-refresh evidence: refresh N times; emit redacted lifetimes only.
+ * @param {ReturnType<typeof parseArgs>} args
+ */
+async function cmdProbeRefresh(args) {
+  const tokenFile = path.resolve(REPO_ROOT, args.tokenFile || DEFAULT_TOKEN_FILE);
+  const authFile = path.resolve(REPO_ROOT, args.authFile || DEFAULT_AUTH_FILE);
+  const rounds = Math.max(1, Number(args.rounds) || 3);
+  const delayMs = Math.max(0, Number(args.delayMs) || 1500);
+  /** @type {object[]} */
+  const samples = [];
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  let initial = await resolveAuthSession({ authFile, tokenFile });
+  if (!initial?.refreshToken || !initial.dpopKeyPair) {
+    console.error('probe-refresh needs state/api-shape-auth.local.json with refresh_token + DPoP');
+    process.exit(EXIT.NEEDS_AUTH);
+  }
+  samples.push(redactAuthLifetime(initial, { label: 'before' }));
+
+  for (let i = 1; i <= rounds; i++) {
+    const result = await ensureAuthSession({
+      authFile,
+      tokenFile,
+      forceRefresh: true,
+    });
+    if (!result.ok) {
+      const out = {
+        ok: false,
+        exitCode: result.exitCode,
+        roundsRequested: rounds,
+        roundsCompleted: i - 1,
+        samples,
+        error: result.error,
+        notes: result.notes,
+        conclusion: {
+          indefiniteRollingRefresh: 'NO',
+          reason: result.error || 'refresh failed',
+        },
+      };
+      if (args.out) {
+        await mkdir(path.dirname(path.resolve(args.out)), { recursive: true });
+        await writeFile(path.resolve(args.out), `${JSON.stringify(out, null, 2)}\n`, 'utf8');
+      }
+      console.log(JSON.stringify(out, null, 2));
+      process.exit(result.exitCode);
+    }
+    samples.push(result.lifetime);
+    if (i < rounds && delayMs) await sleep(delayMs);
+  }
+
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  const rotations = samples
+    .slice(1)
+    .map((s) => s.refreshTokenRotated)
+    .filter((v) => v != null);
+  const allRotated = rotations.length > 0 && rotations.every(Boolean);
+  const anyRotated = rotations.some(Boolean);
+  const refreshWallExtended =
+    first.refreshExpiresAt &&
+    last.refreshExpiresAt &&
+    Date.parse(last.refreshExpiresAt) > Date.parse(first.refreshExpiresAt) + 5_000;
+  const refreshWallShrunkOrSame =
+    first.refreshExpiresAt &&
+    last.refreshExpiresAt &&
+    Date.parse(last.refreshExpiresAt) <= Date.parse(first.refreshExpiresAt) + 5_000;
+
+  /** @type {'YES'|'NO'|'UNKNOWN'} */
+  let indefinite = 'UNKNOWN';
+  let reason = '';
+  if (!first.hasRefreshToken) {
+    indefinite = 'NO';
+    reason = 'No refresh_token issued';
+  } else if (first.refreshExpiresIn == null) {
+    indefinite = 'UNKNOWN';
+    reason =
+      'Keycloak omitted refresh_expires_in; cannot prove indefinite rolling without a measured wall clock or session-max evidence';
+  } else if (refreshWallExtended) {
+    indefinite = 'UNKNOWN';
+    reason =
+      'refresh_expires_at moved forward after refresh (possible sliding window); absolute SSO/offline session max still unknown without longer observation';
+  } else if (refreshWallShrunkOrSame && first.refreshExpiresIn > 0) {
+    indefinite = 'NO';
+    reason = `refresh_expires_in is finite (${first.refreshExpiresIn}s) and absolute refreshExpiresAt did not meaningfully extend across ${rounds} refresh(es) — rolling refresh hits that wall; then device re-login`;
+  } else {
+    indefinite = 'NO';
+    reason = `refresh_expires_in=${first.refreshExpiresIn}s is finite; frontend treats refreshExpiresAt as absolute wall clock`;
+  }
+
+  const out = {
+    ok: true,
+    exitCode: EXIT.SUCCESS,
+    roundsRequested: rounds,
+    roundsCompleted: rounds,
+    samples,
+    rotation: {
+      anyRotated,
+      allRotated,
+      observed: rotations,
+    },
+    wallClock: {
+      firstRefreshExpiresAt: first.refreshExpiresAt,
+      lastRefreshExpiresAt: last.refreshExpiresAt,
+      extended: Boolean(refreshWallExtended),
+      shrunkOrSame: Boolean(refreshWallShrunkOrSame),
+    },
+    dpop: { required: true, clientId: OIDC.clientId },
+    conclusion: {
+      indefiniteRollingRefresh: indefinite,
+      reason,
+    },
+    notes: [
+      'Tokens redacted — only lifetimes/booleans recorded.',
+      'Public realm JSON does not expose ssoSessionMaxLifespan; lifetimes come from token responses.',
+    ],
+  };
+
+  if (args.out) {
+    const dest = path.resolve(args.out);
+    await mkdir(path.dirname(dest), { recursive: true });
+    await writeFile(dest, `${JSON.stringify(out, null, 2)}\n`, 'utf8');
+    console.error(`wrote ${dest}`);
+  }
+  console.log(JSON.stringify(out, null, 2));
   process.exit(EXIT.SUCCESS);
 }
 
@@ -206,11 +393,33 @@ async function cmdCapture(args) {
   const authFile = args.authFile
     ? path.resolve(REPO_ROOT, args.authFile)
     : path.resolve(REPO_ROOT, DEFAULT_AUTH_FILE);
-  const session = await resolveAuthSession({
+  const ensured = await ensureAuthSession({
     token: args.token || null,
     tokenFile,
     authFile,
+    forceRefresh: Boolean(args.forceRefresh),
   });
+  if (!ensured.ok && !args.dryRun) {
+    if (args.json) {
+      console.log(
+        JSON.stringify(
+          {
+            exitCode: ensured.exitCode,
+            error: ensured.error,
+            notes: ensured.notes,
+            lifetime: ensured.lifetime,
+          },
+          null,
+          2,
+        ),
+      );
+    } else {
+      for (const n of ensured.notes || []) console.log(`note: ${n}`);
+      if (ensured.error) console.error(`error: ${ensured.error}`);
+    }
+    process.exit(ensured.exitCode);
+  }
+  const session = ensured.session;
 
   const result = await runCapture({
     artifactsRoot,
@@ -321,7 +530,10 @@ function printHelp() {
   console.log(`Usage: node tools/fp-api-shape-canary/cli.mjs <command> [options]
 
 Commands:
-  device-login     Start Keycloak device flow; write access token to local file
+  device-login     Start Keycloak device flow; write auth session (gitignored)
+  refresh          Force refresh_token grant + update auth file
+  ensure-auth      Refresh if access near expiry (exit 3 if re-login needed)
+  probe-refresh    Rolling-refresh lifetime evidence (redacted JSON)
   capture          Authenticated allowlist capture → field trees + baseline diff
   unauth-list      Unauthenticated companion capture for /api/v3/content/creator
   diff-trees       Offline structural diff of two field-tree schema files
@@ -336,8 +548,12 @@ Options:
   --include-video         Also GET /api/v3/content/video when attachment present
   --with-unauth-list      During capture, also snapshot unauth creator list
   --promote-baselines     Force-write baselines/ from this capture
-  --scope <scopes>        Device-login scope (default: ${OIDC.defaultScope})
+  --force-refresh         capture/ensure-auth: always refresh first
+  --scope <scopes>        Device-login scope (default: ${OIDC.defaultScope}; schedule: ${OIDC.scheduleScope})
   --client-id <id>        Default: ${OIDC.clientId} (do not invent clients)
+  --rounds <n>            probe-refresh iterations (default 3)
+  --delay-ms <n>          probe-refresh delay between refreshes (default 1500)
+  --out <path>            probe-refresh: write redacted evidence JSON
   --no-poll               device-login: print user code and exit (needs auth)
   --dry-run               Do not write artifacts
   --from / --to           diff-trees schema paths
@@ -345,12 +561,12 @@ Options:
   --help
 
 Env:
-  FP_AUTH_FILE            Auth session JSON (access token + DPoP keys)
+  FP_AUTH_FILE            Auth session JSON (access + refresh + DPoP keys)
   FP_ACCESS_TOKEN         Access token only (needs matching DPoP keys for live APIs)
   FP_TOKEN_FILE           Override bare token file path
 
 Evidence-backed OIDC defaults: issuer ${OIDC.issuer}, clientId ${OIDC.clientId}.
-fp-tv-app requires PKCE + DPoP (usesExtendedSecurity).
+fp-tv-app requires PKCE + DPoP (usesExtendedSecurity). Refresh also requires DPoP.
 Non-goals: no OpenAPI edits, no Phase 1/2 schedule changes, no Hydravion, no writes.
 `);
 }
@@ -366,6 +582,7 @@ function parseArgs(argv) {
     includeVideo: false,
     withUnauthList: false,
     promoteBaselines: false,
+    forceRefresh: false,
     token: null,
     tokenFile: null,
     authFile: null,
@@ -377,6 +594,9 @@ function parseArgs(argv) {
     clientId: null,
     from: null,
     to: null,
+    rounds: null,
+    delayMs: null,
+    out: null,
   };
   const rest = [...argv];
   if (rest[0] && !rest[0].startsWith('-')) {
@@ -391,6 +611,7 @@ function parseArgs(argv) {
     else if (a === '--include-video') args.includeVideo = true;
     else if (a === '--with-unauth-list') args.withUnauthList = true;
     else if (a === '--promote-baselines') args.promoteBaselines = true;
+    else if (a === '--force-refresh') args.forceRefresh = true;
     else if (a === '--token') args.token = rest.shift();
     else if (a === '--token-file') args.tokenFile = rest.shift();
     else if (a === '--auth-file') args.authFile = rest.shift();
@@ -402,6 +623,9 @@ function parseArgs(argv) {
     else if (a === '--client-id') args.clientId = rest.shift();
     else if (a === '--from') args.from = rest.shift();
     else if (a === '--to') args.to = rest.shift();
+    else if (a === '--rounds') args.rounds = rest.shift();
+    else if (a === '--delay-ms') args.delayMs = rest.shift();
+    else if (a === '--out') args.out = rest.shift();
     else if (a.startsWith('-')) {
       console.error(`Unknown option: ${a}`);
       args.help = true;
