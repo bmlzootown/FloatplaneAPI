@@ -15,6 +15,12 @@ import {
   TOOL_VERSION,
   UNAUTH_LIST,
 } from './constants.mjs';
+import {
+  accessNeedsRefresh,
+  redactAuthLifetime,
+  refreshAccessToken,
+  refreshIsExpired,
+} from './auth-refresh.mjs';
 import { buildFieldTree } from './field-tree.mjs';
 import { diffBaselineMaps, formatDiffReportMarkdown } from './diff.mjs';
 import { importDpopKeyPair } from './dpop.mjs';
@@ -31,8 +37,17 @@ import { loadBaselines, makeCaptureId, writeCapture } from './store.mjs';
 /**
  * @typedef {{
  *   accessToken: string,
+ *   refreshToken?: string|null,
  *   dpopKeyPair: Awaited<ReturnType<typeof importDpopKeyPair>> | null,
  *   authFile?: string | null,
+ *   expiresIn?: number|null,
+ *   refreshExpiresIn?: number|null,
+ *   accessExpiresAtMs?: number|null,
+ *   refreshExpiresAtMs?: number|null,
+ *   scope?: string|null,
+ *   sessionState?: string|null,
+ *   obtainedAtMs?: number|null,
+ *   responseKeys?: string[]|null,
  * }} AuthSession
  */
 
@@ -54,6 +69,7 @@ export async function resolveAuthSession(opts = {}) {
     return {
       accessToken: opts.token || env.FP_ACCESS_TOKEN,
       dpopKeyPair: opts.dpopKeyPair,
+      refreshToken: null,
     };
   }
 
@@ -67,19 +83,52 @@ export async function resolveAuthSession(opts = {}) {
           publicJwk: doc.dpop.publicJwk,
           privateJwk: doc.dpop.privateJwk,
         });
-        return { accessToken: doc.accessToken, dpopKeyPair, authFile };
+        return {
+          accessToken: doc.accessToken,
+          refreshToken: doc.refreshToken || null,
+          dpopKeyPair,
+          authFile,
+          expiresIn: doc.expiresIn ?? null,
+          refreshExpiresIn: doc.refreshExpiresIn ?? null,
+          accessExpiresAtMs: doc.accessExpiresAtMs ?? null,
+          refreshExpiresAtMs: doc.refreshExpiresAtMs ?? null,
+          scope: doc.scope || null,
+          sessionState: doc.sessionState || null,
+          obtainedAtMs: doc.obtainedAtMs || (doc.writtenAt ? Date.parse(doc.writtenAt) : null),
+          responseKeys: doc.responseKeys || null,
+        };
       }
       if (doc.accessToken) {
-        return { accessToken: doc.accessToken, dpopKeyPair: null, authFile };
+        return {
+          accessToken: doc.accessToken,
+          refreshToken: doc.refreshToken || null,
+          dpopKeyPair: null,
+          authFile,
+          expiresIn: doc.expiresIn ?? null,
+          refreshExpiresIn: doc.refreshExpiresIn ?? null,
+          accessExpiresAtMs: doc.accessExpiresAtMs ?? null,
+          refreshExpiresAtMs: doc.refreshExpiresAtMs ?? null,
+          scope: doc.scope || null,
+        };
       }
     } catch (err) {
       if (!err || err.code !== 'ENOENT') throw err;
     }
   }
 
-  if (opts.token) return { accessToken: opts.token, dpopKeyPair: opts.dpopKeyPair || null };
+  if (opts.token) {
+    return {
+      accessToken: opts.token,
+      dpopKeyPair: opts.dpopKeyPair || null,
+      refreshToken: null,
+    };
+  }
   if (env.FP_ACCESS_TOKEN) {
-    return { accessToken: env.FP_ACCESS_TOKEN, dpopKeyPair: opts.dpopKeyPair || null };
+    return {
+      accessToken: env.FP_ACCESS_TOKEN,
+      dpopKeyPair: opts.dpopKeyPair || null,
+      refreshToken: null,
+    };
   }
 
   const file = opts.tokenFile || env.FP_TOKEN_FILE;
@@ -88,10 +137,178 @@ export async function resolveAuthSession(opts = {}) {
     const raw = await readFile(file, 'utf8');
     const token = raw.trim();
     if (!token) return null;
-    return { accessToken: token, dpopKeyPair: opts.dpopKeyPair || null };
+    return { accessToken: token, dpopKeyPair: opts.dpopKeyPair || null, refreshToken: null };
   } catch (err) {
     if (err && err.code === 'ENOENT') return null;
     throw err;
+  }
+}
+
+/**
+ * Ensure a usable access token: refresh with DPoP when near expiry.
+ * Persists rotated tokens back to the auth file when provided.
+ * @param {{
+ *   token?: string|null,
+ *   tokenFile?: string|null,
+ *   authFile?: string|null,
+ *   env?: NodeJS.ProcessEnv,
+ *   forceRefresh?: boolean,
+ *   fetchImpl?: typeof fetch,
+ *   skewMs?: number,
+ *   now?: () => number,
+ * }} opts
+ */
+export async function ensureAuthSession(opts = {}) {
+  const session = await resolveAuthSession(opts);
+  if (!session?.accessToken) {
+    return {
+      ok: false,
+      exitCode: EXIT.NEEDS_AUTH,
+      session: null,
+      refreshed: false,
+      lifetime: null,
+      error: 'missing auth session — run make api-shape-device-login',
+      notes: [
+        'No access token / auth file. Human device login required.',
+        `Preferred schedule scope: ${OIDC.scheduleScope}`,
+      ],
+    };
+  }
+
+  const now = opts.now || (() => Date.now());
+  const notes = [];
+  if (!session.dpopKeyPair) {
+    notes.push(
+      'No DPoP key pair — live fp-tv-app refresh/API usually require DPoP. Prefer state/api-shape-auth.local.json.',
+    );
+  }
+
+  const needRefresh =
+    Boolean(opts.forceRefresh) ||
+    accessNeedsRefresh(session, { skewMs: opts.skewMs, nowMs: now() });
+
+  if (!needRefresh) {
+    return {
+      ok: true,
+      exitCode: EXIT.SUCCESS,
+      session,
+      refreshed: false,
+      lifetime: redactAuthLifetime(session, { label: 'cached' }),
+      error: null,
+      notes,
+    };
+  }
+
+  if (!session.refreshToken) {
+    return {
+      ok: false,
+      exitCode: EXIT.NEEDS_AUTH,
+      session,
+      refreshed: false,
+      lifetime: redactAuthLifetime(session, { label: 'no-refresh-token' }),
+      error: 'access token expired/unknown and no refresh_token — device re-login required',
+      notes: [
+        ...notes,
+        'Seed with: make api-shape-device-login SCOPE="openid offline_access"',
+      ],
+    };
+  }
+
+  if (refreshIsExpired(session, { nowMs: now() })) {
+    return {
+      ok: false,
+      exitCode: EXIT.NEEDS_AUTH,
+      session,
+      refreshed: false,
+      lifetime: redactAuthLifetime(session, { label: 'refresh-expired' }),
+      error: 'refresh_expires_in wall clock passed — device re-login required',
+      notes: [
+        ...notes,
+        'Rolling refresh cannot continue past Keycloak refresh_expires_in / session max once the refresh token is dead.',
+      ],
+    };
+  }
+
+  if (!session.dpopKeyPair) {
+    return {
+      ok: false,
+      exitCode: EXIT.NEEDS_AUTH,
+      session,
+      refreshed: false,
+      lifetime: redactAuthLifetime(session, { label: 'missing-dpop' }),
+      error: 'refresh requires DPoP key pair (fp-tv-app usesExtendedSecurity)',
+      notes,
+    };
+  }
+
+  try {
+    const previousRefresh = session.refreshToken;
+    const next = await refreshAccessToken({
+      refreshToken: session.refreshToken,
+      dpopKeyPair: session.dpopKeyPair,
+      fetchImpl: opts.fetchImpl,
+      now,
+    });
+    const rotated =
+      Boolean(next.refreshToken) && Boolean(previousRefresh) && next.refreshToken !== previousRefresh;
+    const merged = {
+      ...session,
+      accessToken: next.accessToken,
+      refreshToken: next.refreshToken || session.refreshToken,
+      expiresIn: next.expiresIn,
+      refreshExpiresIn: next.refreshExpiresIn,
+      accessExpiresAtMs: next.accessExpiresAtMs,
+      refreshExpiresAtMs: next.refreshExpiresAtMs ?? session.refreshExpiresAtMs,
+      scope: next.scope || session.scope,
+      sessionState: next.sessionState || session.sessionState,
+      obtainedAtMs: next.obtainedAtMs,
+      responseKeys: next.responseKeys,
+      dpopKeyPair: session.dpopKeyPair,
+    };
+
+    if (session.authFile) {
+      await writeAuthFile(session.authFile, merged);
+    }
+    const tokenFile = opts.tokenFile || opts.env?.FP_TOKEN_FILE;
+    if (tokenFile) {
+      await writeTokenFile(tokenFile, merged.accessToken);
+    }
+
+    notes.push(rotated ? 'refresh_token rotated' : 'refresh_token reused (no rotation observed)');
+    return {
+      ok: true,
+      exitCode: EXIT.SUCCESS,
+      session: merged,
+      refreshed: true,
+      lifetime: redactAuthLifetime(merged, {
+        label: 'refreshed',
+        refreshTokenRotated: rotated,
+      }),
+      error: null,
+      notes,
+    };
+  } catch (err) {
+    const code = err?.code || '';
+    const needsAuth = [
+      'invalid_grant',
+      'invalid_token',
+      'expired_token',
+      'unauthorized_client',
+    ].includes(code);
+    return {
+      ok: false,
+      exitCode: needsAuth ? EXIT.NEEDS_AUTH : EXIT.FAILURE,
+      session,
+      refreshed: false,
+      lifetime: redactAuthLifetime(session, { label: 'refresh-failed' }),
+      error: err?.message || String(err),
+      notes: [
+        ...notes,
+        needsAuth
+          ? 'Refresh failed permanently — run make api-shape-device-login again.'
+          : 'Refresh failed operationally — retry later.',
+      ],
+    };
   }
 }
 
@@ -121,7 +338,13 @@ export async function writeTokenFile(filePath, accessToken) {
  *   accessToken: string,
  *   refreshToken?: string|null,
  *   expiresIn?: number|null,
+ *   refreshExpiresIn?: number|null,
+ *   accessExpiresAtMs?: number|null,
+ *   refreshExpiresAtMs?: number|null,
  *   scope?: string|null,
+ *   sessionState?: string|null,
+ *   obtainedAtMs?: number|null,
+ *   responseKeys?: string[]|null,
  *   dpopKeyPair: { publicJwk: object, privateJwk: object },
  * }} session
  */
@@ -133,7 +356,13 @@ export async function writeAuthFile(filePath, session) {
     accessToken: session.accessToken,
     refreshToken: session.refreshToken || null,
     expiresIn: session.expiresIn ?? null,
+    refreshExpiresIn: session.refreshExpiresIn ?? null,
+    accessExpiresAtMs: session.accessExpiresAtMs ?? null,
+    refreshExpiresAtMs: session.refreshExpiresAtMs ?? null,
+    obtainedAtMs: session.obtainedAtMs ?? Date.now(),
     scope: session.scope || null,
+    sessionState: session.sessionState || null,
+    responseKeys: session.responseKeys || null,
     tokenType: 'DPoP',
     dpop: {
       publicJwk: session.dpopKeyPair.publicJwk,

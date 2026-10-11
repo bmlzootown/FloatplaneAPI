@@ -187,12 +187,31 @@ export async function pollDeviceToken(opts) {
 
     if (res.ok && json.access_token) {
       opts.onPoll?.({ status: 'authorized', attempt });
+      const obtainedAtMs = now();
+      const expiresIn =
+        typeof json.expires_in === 'number' ? json.expires_in : Number(json.expires_in);
+      const refreshExpiresIn =
+        typeof json.refresh_expires_in === 'number'
+          ? json.refresh_expires_in
+          : json.refresh_expires_in != null
+            ? Number(json.refresh_expires_in)
+            : null;
       return {
         accessToken: json.access_token,
         refreshToken: json.refresh_token || null,
-        expiresIn: json.expires_in ?? null,
+        expiresIn: Number.isFinite(expiresIn) ? expiresIn : null,
+        refreshExpiresIn: Number.isFinite(refreshExpiresIn) ? refreshExpiresIn : null,
+        accessExpiresAtMs:
+          Number.isFinite(expiresIn) ? obtainedAtMs + expiresIn * 1000 : null,
+        refreshExpiresAtMs:
+          Number.isFinite(refreshExpiresIn) && refreshExpiresIn > 0
+            ? obtainedAtMs + refreshExpiresIn * 1000
+            : null,
+        sessionState: json.session_state || null,
         tokenType: json.token_type || 'DPoP',
         scope: json.scope || null,
+        obtainedAtMs,
+        responseKeys: Object.keys(json).sort(),
         dpopKeyPair,
       };
     }
