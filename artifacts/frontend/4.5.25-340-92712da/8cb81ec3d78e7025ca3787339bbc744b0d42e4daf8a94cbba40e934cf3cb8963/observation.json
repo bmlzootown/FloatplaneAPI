@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 2,
+  "observationId": "8cb81ec3d78e7025ca3787339bbc744b0d42e4daf8a94cbba40e934cf3cb8963",
+  "previousObservationId": "f71e83fd15643cf82c9cb6a0cf17089067a7d8a689022ae3b4a261a649f5bf8b",
+  "buildId": "4.5.25-340-92712da",
+  "layout": "vite-user",
+  "baseUrl": "https://frontend.floatplane.com/user/4.5.25-340-92712da/",
+  "homepageUrl": "https://www.floatplane.com/",
+  "discoveryMethod": "homepage-html-asset-urls",
+  "observedAt": "2026-10-07T00:31:14.383Z",
+  "artifacts": [
+    {
+      "path": "js/index-DaEmRTqt.js",
+      "url": "https://frontend.floatplane.com/user/4.5.25-340-92712da/js/index-DaEmRTqt.js",
+      "sha256": "b46e9df626080aa3485cfbe7f403310d39db5346b0351effb6f71e95e848f826",
+      "bytes": 1899543,
+      "contentType": "application/javascript"
+    },
+    {
+      "path": "manifest.floatplane.webmanifest",
+      "url": "https://frontend.floatplane.com/user/4.5.25-340-92712da/manifest.floatplane.webmanifest",
+      "sha256": "1e1d685d4e90d1a013ff263615358d9049186525033d4737bb5cdcc4b382b21a",
+      "bytes": 996,
+      "contentType": "application/manifest+json"
+    }
+  ],
+  "artifactDir": "artifacts/frontend/4.5.25-340-92712da/8cb81ec3d78e7025ca3787339bbc744b0d42e4daf8a94cbba40e934cf3cb8963",
+  "comparison": {
+    "status": "new_build",
+    "changedArtifacts": [
+      {
+        "path": "js/index-DaEmRTqt.js",
+        "previousSha256": null,
+        "currentSha256": "b46e9df626080aa3485cfbe7f403310d39db5346b0351effb6f71e95e848f826"
+      },
+      {
+        "path": "manifest.floatplane.webmanifest",
+        "previousSha256": "1e1d685d4e90d1a013ff263615358d9049186525033d4737bb5cdcc4b382b21a",
+        "currentSha256": "1e1d685d4e90d1a013ff263615358d9049186525033d4737bb5cdcc4b382b21a"
+      }
+    ],
+    "removedArtifacts": [
+      "js/index-BZVDPgzb.js"
+    ],
+    "summary": "New frontend build id: 4.5.22-316-d74397b → 4.5.25-340-92712da"
+  },
+  "evidence": [
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.25-340-92712da/manifest.floatplane.webmanifest"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.25-340-92712da/js/index-DaEmRTqt.js"
+    },
+    {
+      "kind": "module-script-src",
+      "value": "https://frontend.floatplane.com/user/4.5.25-340-92712da/js/index-DaEmRTqt.js"
+    },
+    {
+      "kind": "manifest-href",
+      "value": "https://frontend.floatplane.com/user/4.5.25-340-92712da/manifest.floatplane.webmanifest"
+    },
+    {
+      "kind": "manifest-href",
+      "value": "https://frontend.floatplane.com/user/4.5.25-340-92712da/manifest.floatplane.webmanifest"
+    }
+  ],
+  "discoveryHomepageSha256": "60ee3ae0eca92a1708c035343428fc1d8ccbb0aad9628504f4ecd83cbf9cb314"
+}

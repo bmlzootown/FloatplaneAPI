@@ -1,0 +1,1 @@
+var e;(l=>{function a(){return{valid:!1,invalid:!0,loading:!0,error:!1,value:null,errorValue:null}}l.loading=a;function n(r){return{valid:!1,invalid:!0,loading:!1,error:!0,value:null,errorValue:r}}l.error=n;function i(r){return{valid:!0,invalid:!1,loading:!1,error:!1,value:r,errorValue:null}}l.valid=i})(e||(e={}));export{e as L};
