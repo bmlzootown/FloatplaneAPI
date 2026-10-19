@@ -6,8 +6,16 @@ import { fileURLToPath } from 'node:url';
 import {
   buildNotifyPayload,
   formatEndpointExample,
+  humanEndpointName,
+  shapeHeadline,
   shouldNotify,
 } from '../../tools/fp-notify/lib/payloads.mjs';
+import {
+  buildBeforeAfter,
+  formatBeforeAfterField,
+  placeholderFor,
+  sanitizeSample,
+} from '../../tools/fp-notify/lib/before-after.mjs';
 import { notifyFromDecision } from '../../tools/fp-notify/lib/notify.mjs';
 import { resolveWebhookUrl, redactWebhookUrl } from '../../tools/fp-notify/lib/resolve-webhook.mjs';
 import { MAX_FIELD_VALUE } from '../../tools/fp-notify/lib/constants.mjs';
@@ -38,8 +46,8 @@ describe('shouldNotify', () => {
   });
 });
 
-describe('shape payload examples', () => {
-  it('includes concrete removed/added field paths', () => {
+describe('shape payload human copy + before/after', () => {
+  it('uses a human headline and illustrative before/after for removed field', () => {
     const decision = {
       action: 'open_shape_pr',
       reason: 'structural_drift',
@@ -53,6 +61,7 @@ describe('shape payload examples', () => {
             added: ['creator.newField'],
             removed: ['creator.discoverable'],
             typeChanged: [{ path: 'id', from: 'string', to: 'number' }],
+            typeHints: { 'creator.discoverable': 'boolean', 'creator.newField': 'string' },
           },
         },
       },
@@ -63,13 +72,66 @@ describe('shape payload examples', () => {
     assert.equal(built.skipped, false);
     assert.equal(built.lane, 'shape');
     const embed = built.payload.embeds[0];
-    assert.match(embed.title, /shape/i);
-    const ep = embed.fields.find((f) => f.name === 'content-post');
+    assert.match(embed.title, /Floatplane changed the shape of content posts/i);
+    assert.doesNotMatch(embed.title, /open_shape_pr|structural_drift/i);
+    assert.doesNotMatch(embed.description, /Reason: `structural_drift`/);
+
+    const ep = embed.fields.find((f) => /content posts/i.test(f.name));
     assert.ok(ep);
     assert.match(ep.value, /creator\.discoverable/);
     assert.match(ep.value, /creator\.newField/);
-    assert.match(ep.value, /id/);
+
+    const example = embed.fields.find((f) => /Example response fragment/i.test(f.name));
+    assert.ok(example);
+    assert.match(example.value, /illustrative/i);
+    assert.match(example.value, /discoverable/);
+    assert.match(example.value, /Before/i);
+    assert.match(example.value, /After/i);
+
+    // Action / capture are secondary (footer), not headline fields.
+    assert.ok(!embed.fields.some((f) => f.name === 'Action'));
+    assert.ok(!embed.fields.some((f) => f.name === 'Capture'));
+    assert.match(embed.footer.text, /open_shape_pr/);
+    assert.match(embed.footer.text, /c-test/);
+
     assert.ok(JSON.stringify(built.payload).length < 5500);
+  });
+
+  it('headlines a single removal clearly (PR #13 style)', () => {
+    const by = {
+      'content-post': {
+        hasDrift: true,
+        added: [],
+        removed: ['creator.discoverable'],
+        typeChanged: [],
+        typeHints: { 'creator.discoverable': 'boolean' },
+      },
+    };
+    assert.equal(
+      shapeHeadline(['content-post'], by),
+      'Floatplane removed a field from content posts',
+    );
+    assert.equal(humanEndpointName('content-post'), 'content posts');
+
+    const ba = buildBeforeAfter(by['content-post']);
+    assert.equal(ba.source, 'illustrative');
+    assert.equal(ba.before?.creator?.discoverable, true);
+    assert.ok(ba.after?.creator);
+    assert.equal('discoverable' in (ba.after.creator || {}), false);
+  });
+
+  it('prefers sanitized capture samples when present', () => {
+    const ba = buildBeforeAfter({
+      hasDrift: true,
+      removed: ['creator.discoverable'],
+      sampleBefore: { creator: { id: 'abc', discoverable: true, email: 'hide@me' } },
+      sampleAfter: { creator: { id: 'abc' } },
+    });
+    assert.equal(ba.source, 'capture');
+    assert.match(ba.label, /sanitized capture/i);
+    assert.equal(ba.before.creator.email, '[redacted]');
+    assert.equal(ba.before.creator.discoverable, true);
+    assert.equal(ba.after.creator.discoverable, undefined);
   });
 
   it('formatEndpointExample caps path lists; field trunc respects Discord limit', () => {
@@ -82,6 +144,17 @@ describe('shape payload examples', () => {
     });
     assert.match(text, /\+\d+ more/);
     assert.ok(truncField(text).length <= MAX_FIELD_VALUE);
+    assert.ok(formatBeforeAfterField({ added: many, removed: [] }).length <= MAX_FIELD_VALUE);
+  });
+
+  it('sanitizeSample redacts tokens', () => {
+    const s = sanitizeSample({
+      accessToken: 'eyJhbGciOiJIUzI1NiJ9.abc.def',
+      title: 'ok',
+    });
+    assert.equal(s.accessToken, '[redacted]');
+    assert.equal(s.title, 'ok');
+    assert.equal(placeholderFor('discoverable', 'boolean'), true);
   });
 });
 
@@ -92,7 +165,14 @@ describe('frontend payload', () => {
         action: 'update_monitor_pr',
         reason: 'phase1_drives_pr_phase2_enriches_body',
         orchestratorId: 'phase2.3-frontend-evidence-orchestrate',
-        phase1: { action: 'update_monitor_pr', buildId: '4.5.25-340-92712da' },
+        phase1: {
+          action: 'update_monitor_pr',
+          buildId: '4.5.25-340-92712da',
+          comparisonSummary: 'New frontend build id: 4.5.22-316-d74397b → 4.5.25-340-92712da',
+        },
+        phase2: {
+          headline: '350 structured op(s) disappeared from frontend evidence; 27 provenance move(s)',
+        },
         pendingObservations: [{ buildId: '4.5.25-340-92712da', observationId: 'abc' }],
         commitSequence: {
           commits: [
@@ -109,10 +189,18 @@ describe('frontend payload', () => {
     );
     assert.equal(built.skipped, false);
     assert.equal(built.lane, 'frontend');
-    const desc = built.payload.embeds[0].description;
-    assert.match(desc, /not a server API claim/i);
+    const embed = built.payload.embeds[0];
+    assert.match(embed.title, /New frontend build observed/i);
+    assert.doesNotMatch(embed.title, /open_monitor_pr|Phase/i);
+    const desc = embed.description;
+    assert.match(desc, /not.*server API/i);
     assert.doesNotMatch(desc, /OpenAPI schema changed/i);
-    assert.match(JSON.stringify(built.payload), /4\.5\.25-340-92712da/);
+    assert.match(desc, /4\.5\.25-340-92712da/);
+    assert.match(desc, /4\.5\.22-316-d74397b/);
+    assert.ok(!embed.fields.some((f) => f.name === 'Action' || f.name === 'Phase 1'));
+    const saw = embed.fields.find((f) => f.name === 'What we saw');
+    assert.ok(saw);
+    assert.match(saw.value, /350 structured/);
   });
 });
 
@@ -167,6 +255,7 @@ describe('resolve + notify', () => {
               added: [],
               removed: ['creator.discoverable'],
               typeChanged: [],
+              typeHints: { 'creator.discoverable': 'boolean' },
             },
           },
         },
@@ -178,7 +267,10 @@ describe('resolve + notify', () => {
     assert.equal(posted.notified, true);
     assert.equal(posted.webhook.includes('redacted'), true);
     assert.ok(!JSON.stringify(posted).includes('/tok'));
-    assert.match(postedBody.embeds[0].fields.find((f) => f.name === 'content-post').value, /discoverable/);
+    assert.match(postedBody.embeds[0].title, /removed a field/i);
+    const frag = postedBody.embeds[0].fields.find((f) => /Example response fragment/i.test(f.name));
+    assert.ok(frag);
+    assert.match(frag.value, /discoverable/);
   });
 
   it('dry-run does not call fetch', async () => {

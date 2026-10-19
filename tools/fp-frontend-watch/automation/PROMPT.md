@@ -69,9 +69,10 @@ Push normally (fast-forward only). **Never force-push** observation or evidence 
 - After commits: open or update **one** PR into `main` with `decision.prTitle` and `decision.prBody`.
 - Body includes Phase 1 pending ledger **and** Phase 2 analysis summaries (links to MD reports; compact counts only).
 - At most one open monitoring PR.
-- **Fluxer notify (change only):** after the PR URL is known, post a short webhook alert summarizing
-  the build/evidence delta (frontend evidence only — never claim the server API changed). Skipped
-  quietly if the webhook secret is unset:
+- **Fluxer notify (change only):** after the PR URL is known, post a short **human-readable**
+  webhook alert (e.g. “New frontend build observed”) summarizing the build/evidence delta
+  (frontend evidence only — never claim the server API changed). Skipped quietly if the webhook
+  secret is unset:
   ```sh
   node tools/fp-notify/cli.mjs notify --decision-file /tmp/frontend-decision.json --pr-url "$PR_URL"
   ```

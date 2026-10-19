@@ -15,7 +15,7 @@ export const MAX_EMBED_TITLE = 256;
 export const MAX_PAYLOAD_CHARS = 5500;
 
 export const TOOL_ID = 'fp-notify';
-export const TOOL_VERSION = '1.0.0';
+export const TOOL_VERSION = '1.1.0';
 
 export const DEFAULT_USERNAME = 'FloatplaneAPI Watch';
 

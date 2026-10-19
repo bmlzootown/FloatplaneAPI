@@ -32,24 +32,35 @@ import {
   TOOL_VERSION,
 } from './lib/constants.mjs';
 import { decideShapeMonitorAction, formatShapePrBody } from './lib/schedule-decision.mjs';
+import { flattenFieldTree } from './lib/field-tree.mjs';
 import { ensureAuthSession, runCapture } from './lib/run.mjs';
+import { loadBaselines } from './lib/store.mjs';
 import { notifyFromDecision } from '../fp-notify/lib/notify.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const ORCHESTRATOR_ID = 'fp-api-shape-schedule';
-const ORCHESTRATOR_VERSION = '3.1.1';
+const ORCHESTRATOR_VERSION = '3.1.2';
 /** Cap path samples embedded in decision JSON for Fluxer alerts / PR bodies. */
 const PATH_SAMPLE_CAP = 12;
 
 /**
  * Counts + capped path samples for alerts (no response bodies).
+ * Optional typeHints help Fluxer synthesize illustrative before/after JSON.
  * @param {object} d
+ * @param {{ baselineTree?: object, currentTree?: object }} [trees]
  */
-function summarizeEndpointDiff(d) {
+function summarizeEndpointDiff(d, trees = {}) {
   const added = d.added || [];
   const removed = d.removed || [];
   const typeChanged = d.typeChanged || [];
+  const typeHints = collectTypeHints({
+    added: added.slice(0, PATH_SAMPLE_CAP),
+    removed: removed.slice(0, PATH_SAMPLE_CAP),
+    typeChanged: typeChanged.slice(0, PATH_SAMPLE_CAP),
+    baselineTree: trees.baselineTree,
+    currentTree: trees.currentTree,
+  });
   return {
     hasDrift: Boolean(d.hasDrift),
     addedCount: added.length,
@@ -64,7 +75,38 @@ function summarizeEndpointDiff(d) {
       removed.length > PATH_SAMPLE_CAP ||
       typeChanged.length > PATH_SAMPLE_CAP,
     note: d.note || undefined,
+    ...(Object.keys(typeHints).length ? { typeHints } : {}),
   };
+}
+
+/**
+ * Map changed paths → JSON type from baseline (removed) or current (added) field-trees.
+ * @param {{
+ *   added: string[],
+ *   removed: string[],
+ *   typeChanged: object[],
+ *   baselineTree?: object,
+ *   currentTree?: object,
+ * }} input
+ */
+function collectTypeHints(input) {
+  /** @type {Record<string, string|string[]>} */
+  const hints = {};
+  const fromFlat = input.baselineTree ? flattenFieldTree(input.baselineTree) : {};
+  const toFlat = input.currentTree ? flattenFieldTree(input.currentTree) : {};
+  for (const path of input.removed || []) {
+    if (fromFlat[path]?.type != null) hints[path] = fromFlat[path].type;
+  }
+  for (const path of input.added || []) {
+    if (toFlat[path]?.type != null) hints[path] = toFlat[path].type;
+  }
+  for (const t of input.typeChanged || []) {
+    if (typeof t === 'object' && t?.path) {
+      if (t.from != null) hints[`${t.path}__from`] = t.from;
+      if (t.to != null) hints[`${t.path}__to`] = t.to;
+    }
+  }
+  return hints;
 }
 
 async function main(argv) {
@@ -128,9 +170,10 @@ async function main(argv) {
     dryRun: Boolean(args.dryRun),
   });
 
+  const baselines = await loadBaselines(artifactsRoot).catch(() => ({}));
   const decision = decideShapeMonitorAction({
     auth,
-    capture: summarizeCapture(capture),
+    capture: summarizeCapture(capture, baselines),
     openShapePrs: args.openPrsJson || [],
     nowIso: new Date().toISOString(),
   });
@@ -143,7 +186,11 @@ async function main(argv) {
   process.exit(mapExit(decision));
 }
 
-function summarizeCapture(capture) {
+/**
+ * @param {object} capture
+ * @param {Record<string, object>} [baselines]
+ */
+function summarizeCapture(capture, baselines = {}) {
   return {
     exitCode: capture.exitCode,
     captureId: capture.captureId,
@@ -157,7 +204,10 @@ function summarizeCapture(capture) {
       ? Object.fromEntries(
           Object.entries(capture.diff.byEndpoint).map(([id, d]) => [
             id,
-            summarizeEndpointDiff(d),
+            summarizeEndpointDiff(d, {
+              baselineTree: baselines[id],
+              currentTree: capture.trees?.[id],
+            }),
           ]),
         )
       : {},
