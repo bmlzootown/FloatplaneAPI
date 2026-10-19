@@ -28,6 +28,14 @@ subscription from an agent unless the coordinator explicitly asks.
 
 ```sh
 node tools/fp-api-shape-canary/schedule-orchestrate.mjs --json
+
+After `open_shape_pr` / `update_shape_pr` and a known PR URL, Automation runs:
+
+```sh
+node tools/fp-notify/cli.mjs notify --decision-file /tmp/shape-decision.json --pr-url "$PR_URL"
+```
+
+Webhook secret: `FLUXER_WEBHOOK_URL` or Project `secrets/fluxer-webhook.url` (never commit).
 # or
 make api-shape-schedule-json
 ```

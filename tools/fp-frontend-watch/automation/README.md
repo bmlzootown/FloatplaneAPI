@@ -30,10 +30,19 @@ Unattended Cursor Automation every **6 hours** against `bmlzootown/FloatplaneAPI
 
 Do **not** pass `--run-tests` on routine cycles.
 
+After `open_monitor_pr` / `update_monitor_pr` and a known PR URL, Automation runs:
+
+```sh
+node tools/fp-notify/cli.mjs notify --decision-file /tmp/frontend-decision.json --pr-url "$PR_URL"
+```
+
+Webhook secret: `FLUXER_WEBHOOK_URL` or Project `secrets/fluxer-webhook.url` (never commit).
+
 ```sh
 # Offline tests (local/CI only)
 make frontend-watch-test
 make frontend-phase2-orch-test
+make notify-test
 
 # Phase 1.2 only
 make frontend-monitor-json

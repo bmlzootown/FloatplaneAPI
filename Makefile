@@ -17,6 +17,7 @@ help:
 	@echo "api-shape-test api-shape-device-login api-shape-capture api-shape-unauth-list"
 	@echo "api-shape-diff-trees api-shape-refresh api-shape-ensure-auth api-shape-probe-refresh"
 	@echo "api-shape-schedule api-shape-schedule-json"
+	@echo "notify-test notify-preview"
 
 # Section: Helpers and structural
 
@@ -124,6 +125,21 @@ api-shape-schedule:
 
 api-shape-schedule-json:
 	node tools/fp-api-shape-canary/schedule-orchestrate.mjs --json
+
+# Fluxer / Discord-compatible webhook notifier (change-only; never commit webhook URL)
+notify-test:
+	node --test tests/fp-notify/notify.test.mjs
+
+# Usage: make notify-preview DECISION=/tmp/decision.json
+#        make notify-preview DECISION=/tmp/decision.json PR_URL=https://github.com/…/pull/N
+notify-preview:
+	@test -n "$(DECISION)" || (echo 'DECISION=<decision.json> required' >&2; exit 1)
+	node tools/fp-notify/cli.mjs preview --decision-file "$(DECISION)" $(if $(PR_URL),--pr-url "$(PR_URL)",)
+
+# Usage: make notify DECISION=/tmp/decision.json [PR_URL=…]
+notify:
+	@test -n "$(DECISION)" || (echo 'DECISION=<decision.json> required' >&2; exit 1)
+	node tools/fp-notify/cli.mjs notify --decision-file "$(DECISION)" $(if $(PR_URL),--pr-url "$(PR_URL)",)
 
 # Usage: make api-shape-diff-trees FROM=path/to/a.schema.json TO=path/to/b.schema.json
 api-shape-diff-trees:

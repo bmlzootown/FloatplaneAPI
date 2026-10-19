@@ -37,6 +37,7 @@ import {
   ORCHESTRATOR_ID,
   ORCHESTRATOR_VERSION,
 } from '../fp-frontend-evidence/lib/orchestrate/constants.mjs';
+import { notifyFromDecision } from '../fp-notify/lib/notify.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -51,6 +52,9 @@ async function main(argv) {
 
   if (args.decisionOnly) {
     const decision = await buildDecisionOnly(args);
+    if (args.notify) {
+      decision.notify = await maybeNotify(decision, args);
+    }
     emit(decision, args);
     process.exit(
       decision.action === 'abort' || decision.action === 'report_failure'
@@ -187,6 +191,9 @@ async function main(argv) {
   });
 
   attachPrBody(unified, phase1Decision, phase2);
+  if (args.notify) {
+    unified.notify = await maybeNotify(unified, args);
+  }
   emit(unified, args);
 
   const failed =
@@ -197,6 +204,27 @@ async function main(argv) {
     (phase2.results || []).some((r) => r.extractFailed || r.compareFailed);
 
   process.exit(failed && !phase1Decision.appendObservationCommit ? EXIT.FAILURE : 0);
+}
+
+async function maybeNotify(decision, args) {
+  try {
+    return await notifyFromDecision({
+      decision,
+      prUrl:
+        args.prUrl ||
+        decision.openMonitorPr?.url ||
+        decision.phase1?.openMonitorPr?.url ||
+        null,
+      dryRun: Boolean(args.notifyDryRun),
+    });
+  } catch (err) {
+    return {
+      notified: false,
+      skipped: true,
+      reason: 'notify-error',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 function wrapUnified(fields) {
@@ -409,6 +437,9 @@ Options:
   --phase2-json <json>
   --phase1-json <json>
   --race-json <json>
+  --notify            After decision: Fluxer webhook on change (tools/fp-notify)
+  --notify-dry-run    Build/resolve notify without POSTing
+  --pr-url <url>      PR URL to attach when notifying
   -h, --help
 `);
 }
@@ -421,6 +452,9 @@ function parseArgs(argv) {
     force: false,
     runTests: false,
     decisionOnly: false,
+    notify: false,
+    notifyDryRun: false,
+    prUrl: null,
     help: false,
     phase: 'live',
     phase2Json: null,
@@ -435,6 +469,11 @@ function parseArgs(argv) {
     else if (a === '--force') out.force = true;
     else if (a === '--run-tests') out.runTests = true;
     else if (a === '--decision-only') out.decisionOnly = true;
+    else if (a === '--notify') out.notify = true;
+    else if (a === '--notify-dry-run') {
+      out.notify = true;
+      out.notifyDryRun = true;
+    } else if (a === '--pr-url') out.prUrl = argv[++i];
     else if (a === '-h' || a === '--help') out.help = true;
     else if (a === '--phase') out.phase = argv[++i];
     else if (a === '--phase2-json') out.phase2Json = JSON.parse(argv[++i]);
