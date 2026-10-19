@@ -1,0 +1,36 @@
+{
+  "byEndpoint": {
+    "content-creator": {
+      "added": [],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 73,
+      "hasDrift": false
+    },
+    "content-post": {
+      "added": [],
+      "removed": [
+        "creator.discoverable"
+      ],
+      "typeChanged": [],
+      "unchangedCount": 141,
+      "hasDrift": true
+    },
+    "user-self": {
+      "added": [],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 22,
+      "hasDrift": false
+    },
+    "user-subscriptions": {
+      "added": [],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 26,
+      "hasDrift": false
+    }
+  },
+  "hasDrift": true,
+  "firstCapture": false
+}
