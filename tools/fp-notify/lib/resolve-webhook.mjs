@@ -43,8 +43,12 @@ export async function resolveWebhookUrl(opts = {}) {
       fileCandidates.push(String(env[key]).trim());
     }
   }
-  if (opts.storePath) fileCandidates.push(opts.storePath);
-  fileCandidates.push(DEFAULT_WEBHOOK_STORE_PATH);
+  if (opts.storePath) {
+    // Explicit store path: try only that file (tests / overrides), not the Project default.
+    fileCandidates.push(opts.storePath);
+  } else {
+    fileCandidates.push(DEFAULT_WEBHOOK_STORE_PATH);
+  }
 
   for (const file of fileCandidates) {
     try {

@@ -82,8 +82,9 @@ Structural drift vs committed `artifacts/api-shape/baselines/`.
    Do **not** commit `state/api-shape-*.local*`.
 3. Open or update **one** draft PR into `main` with `prTitle` / `prBody`.
 4. Fast-forward push only. Never force-push.
-5. **Fluxer notify (change only):** after the PR URL is known, post a short webhook alert
-   (skipped quietly if the webhook secret is unset):
+5. **Fluxer notify (change only):** after the PR URL is known, post a short **human-readable**
+   webhook alert (plain-language title + before/after response fragment when paths are known;
+   skipped quietly if the webhook secret is unset):
    ```sh
    node tools/fp-notify/cli.mjs notify --decision-file /tmp/shape-decision.json --pr-url "$PR_URL"
    ```

@@ -1,7 +1,8 @@
 /**
  * Build Discord/Fluxer-compatible webhook payloads from monitor decisions.
  *
- * Shape canary: summary + concrete field path examples (added/removed/typeChanged).
+ * Human-first copy: titles a person can skim; Action/PR secondary in footer.
+ * Shape canary: before → after JSON fragment (capture sample or illustrative).
  * Frontend watch: build/evidence delta only — never invent server API claims.
  */
 
@@ -15,6 +16,7 @@ import {
   MAX_ENDPOINTS_IN_EMBED,
   MAX_PATHS_PER_KIND,
 } from './constants.mjs';
+import { formatBeforeAfterField } from './before-after.mjs';
 import { formatPathList, truncDescription, truncField, truncTitle } from './truncate.mjs';
 
 /**
@@ -106,63 +108,72 @@ export function buildNotifyPayload(decision, opts = {}) {
  */
 export function buildShapePayload(decision, opts = {}) {
   const capture = decision.capture || {};
-  const by = capture.byEndpoint || {};
-  const captureId = decision.captureId || capture.captureId || 'n/a';
-  const prUrl = opts.prUrl || decision.existingPr?.url || null;
-
-  const fields = [
-    {
-      name: 'Action',
-      value: truncField(`\`${decision.action}\``),
-      inline: true,
-    },
-    {
-      name: 'Capture',
-      value: truncField(`\`${captureId}\``),
-      inline: true,
-    },
-  ];
+  const by = mergeEndpointViews(decision, capture);
+  const captureId = decision.captureId || capture.captureId || null;
+  const prUrl = opts.prUrl || decision.existingPr?.url || decision.prUrl || null;
 
   const endpointIds = Object.keys(by).sort();
   const drifted = endpointIds.filter((id) => by[id]?.hasDrift);
   const show = (drifted.length ? drifted : endpointIds).slice(0, MAX_ENDPOINTS_IN_EMBED);
 
+  const headline = shapeHeadline(show, by);
+  const summary = shapeSummarySentence(show, by);
+
+  const fields = [];
+
   for (const id of show) {
+    const ep = by[id];
+    const changeSummary = formatEndpointExample(ep);
     fields.push({
-      name: truncTitle(id),
-      value: truncField(formatEndpointExample(by[id])),
+      name: truncTitle(humanEndpointName(id)),
+      value: truncField(changeSummary || '(drift flagged)'),
       inline: false,
     });
+
+    const ba = formatBeforeAfterField(ep);
+    if (ba) {
+      fields.push({
+        name: truncTitle('Example response fragment'),
+        value: truncField(ba),
+        inline: false,
+      });
+    }
   }
+
   const omitted = drifted.length - show.length;
   if (omitted > 0) {
     fields.push({
-      name: 'More endpoints',
-      value: truncField(`… +${omitted} drifted endpoint(s) not shown`),
+      name: 'Also changed',
+      value: truncField(`… +${omitted} more endpoint(s)`),
       inline: false,
     });
   }
 
   if (prUrl) {
-    fields.push({ name: 'PR', value: truncField(prUrl), inline: false });
+    fields.push({
+      name: 'Review',
+      value: truncField(`[Open pull request](${prUrl})`),
+      inline: false,
+    });
   }
+
+  const footerBits = ['API shape canary · read-only'];
+  if (captureId) footerBits.push(`capture ${captureId}`);
+  if (decision.action) footerBits.push(decision.action);
 
   /** @type {object} */
   const embed = {
-    title: truncTitle('API response-shape drift'),
+    title: truncTitle(headline),
     description: truncDescription(
       [
-        'Structural field-tree change vs committed baselines.',
-        '**Read-only canary · no OpenAPI auto-edit · no Hydravion.**',
-        decision.reason ? `Reason: \`${decision.reason}\`` : null,
-      ]
-        .filter(Boolean)
-        .join('\n'),
+        summary,
+        'Compared against the last committed baseline. Read-only check — no OpenAPI edits.',
+      ].join('\n'),
     ),
     color: COLOR_SHAPE_DRIFT,
     fields,
-    footer: { text: 'Phase 3.1 api-shape-canary' },
-    timestamp: decision.decidedAt || new Date().toISOString(),
+    footer: { text: truncField(footerBits.join(' · ')).slice(0, 2048) },
+    timestamp: decision.decidedAt || decision.ranAt || new Date().toISOString(),
   };
   if (prUrl) embed.url = prUrl;
 
@@ -170,6 +181,128 @@ export function buildShapePayload(decision, opts = {}) {
     username: opts.username || DEFAULT_USERNAME,
     embeds: [embed],
   };
+}
+
+/**
+ * Merge capture.byEndpoint with optional top-level driftSummary (path arrays).
+ * @param {object} decision
+ * @param {object} capture
+ */
+function mergeEndpointViews(decision, capture) {
+  const by = { ...(capture.byEndpoint || {}) };
+  const summary = decision.driftSummary || {};
+  for (const [id, s] of Object.entries(summary)) {
+    const cur = by[id] || {};
+    by[id] = {
+      ...cur,
+      hasDrift: cur.hasDrift ?? s.hasDrift ?? true,
+      added: preferPaths(cur.added, s.added),
+      removed: preferPaths(cur.removed, s.removed),
+      typeChanged: preferTypeChanged(cur.typeChanged, s.typeChanged),
+      typeHints: { ...(cur.typeHints || {}), ...(s.typeHints || {}) },
+      sampleBefore: cur.sampleBefore ?? s.sampleBefore,
+      sampleAfter: cur.sampleAfter ?? s.sampleAfter,
+    };
+  }
+  return by;
+}
+
+function preferPaths(a, b) {
+  const aa = asPathArray(a);
+  if (aa.length) return aa;
+  return asPathArray(b);
+}
+
+function preferTypeChanged(a, b) {
+  const aa = asTypeChangedArray(a);
+  if (aa.length) return aa;
+  return asTypeChangedArray(b);
+}
+
+/**
+ * @param {string[]} endpointIds
+ * @param {Record<string, object>} by
+ */
+export function shapeHeadline(endpointIds, by) {
+  if (!endpointIds.length) return 'Floatplane API response shape changed';
+  if (endpointIds.length > 1) {
+    return `Floatplane changed ${endpointIds.length} API response shapes`;
+  }
+  const id = endpointIds[0];
+  const ep = by[id] || {};
+  const added = asPathArray(ep.added);
+  const removed = asPathArray(ep.removed);
+  const typed = asTypeChangedArray(ep.typeChanged);
+  const name = humanEndpointName(id);
+
+  if (removed.length && !added.length && !typed.length) {
+    return removed.length === 1
+      ? `Floatplane removed a field from ${name}`
+      : `Floatplane removed ${removed.length} fields from ${name}`;
+  }
+  if (added.length && !removed.length && !typed.length) {
+    return added.length === 1
+      ? `Floatplane added a field to ${name}`
+      : `Floatplane added ${added.length} fields to ${name}`;
+  }
+  if (typed.length && !added.length && !removed.length) {
+    return typed.length === 1
+      ? `Floatplane changed a field type in ${name}`
+      : `Floatplane changed field types in ${name}`;
+  }
+  return `Floatplane changed the shape of ${name}`;
+}
+
+/**
+ * @param {string[]} endpointIds
+ * @param {Record<string, object>} by
+ */
+function shapeSummarySentence(endpointIds, by) {
+  if (!endpointIds.length) return 'Structural change vs the committed field-tree baseline.';
+  if (endpointIds.length === 1) {
+    const id = endpointIds[0];
+    const ep = by[id] || {};
+    const removed = asPathArray(ep.removed);
+    const added = asPathArray(ep.added);
+    const bits = [];
+    if (removed.length) {
+      bits.push(
+        removed.length === 1
+          ? `removed \`${removed[0]}\``
+          : `removed ${removed.length} fields (e.g. \`${removed[0]}\`)`,
+      );
+    }
+    if (added.length) {
+      bits.push(
+        added.length === 1
+          ? `added \`${added[0]}\``
+          : `added ${added.length} fields (e.g. \`${added[0]}\`)`,
+      );
+    }
+    const typed = asTypeChangedArray(ep.typeChanged);
+    if (typed.length) {
+      const p = typeof typed[0] === 'string' ? typed[0] : typed[0]?.path;
+      bits.push(p ? `type-changed \`${p}\`` : `type-changed ${typed.length} field(s)`);
+    }
+    if (bits.length) return `${humanEndpointName(id)}: ${bits.join('; ')}.`;
+  }
+  return `Observed on: ${endpointIds.map(humanEndpointName).join(', ')}.`;
+}
+
+/**
+ * Friendly label for allowlisted endpoint ids.
+ * @param {string} id
+ */
+export function humanEndpointName(id) {
+  const map = {
+    'content-post': 'content posts',
+    'content-creator': 'creator listings',
+    'content-creator-unauth': 'public creator listings',
+    'content-video': 'video metadata',
+    'user-self': 'the current-user profile',
+    'user-subscriptions': 'user subscriptions',
+  };
+  return map[id] || id.replace(/-/g, ' ');
 }
 
 /**
@@ -185,15 +318,15 @@ export function formatEndpointExample(ep) {
   const typeChanged = asTypeChangedArray(ep.typeChanged);
 
   if (removed.length) {
-    parts.push('**removed**');
+    parts.push('**Removed**');
     parts.push(formatPathList(removed, MAX_PATHS_PER_KIND, '− '));
   }
   if (added.length) {
-    parts.push('**added**');
+    parts.push('**Added**');
     parts.push(formatPathList(added, MAX_PATHS_PER_KIND, '+ '));
   }
   if (typeChanged.length) {
-    parts.push('**type changed**');
+    parts.push('**Type changed**');
     const lines = typeChanged.slice(0, MAX_PATHS_PER_KIND).map((t) => {
       if (typeof t === 'string') return `~ \`${t}\``;
       const from = Array.isArray(t.from) ? t.from.join('|') : t.from;
@@ -231,89 +364,82 @@ export function buildFrontendPayload(decision, opts = {}) {
     decision.buildId ||
     lastPendingBuild(decision) ||
     'n/a';
+  const previousBuild =
+    phase1.previousBuildId ||
+    decision.previousBuildId ||
+    phase1.previousObservation?.buildId ||
+    parsePreviousBuild(phase1.comparisonSummary) ||
+    null;
   const prUrl =
     opts.prUrl ||
     decision.openMonitorPr?.url ||
     phase1.openMonitorPr?.url ||
+    decision.prUrl ||
     null;
 
   const pending = decision.pendingObservations || phase1.pendingObservations || [];
   const analyses = decision.analyses || phase2.analyses || [];
-  const commits = decision.commitSequence?.commits || [];
+  const commits =
+    decision.commitSequence?.commits ||
+    decision.commits ||
+    [];
 
-  const summaryLines = [
-    'Frontend watch / evidence change (not a server API claim).',
-    decision.reason ? `Reason: \`${decision.reason}\`` : null,
-  ].filter(Boolean);
+  const title = 'New frontend build observed';
 
-  const fields = [
-    {
-      name: 'Action',
-      value: truncField(`\`${decision.action}\``),
-      inline: true,
-    },
-    {
-      name: 'Build',
-      value: truncField(`\`${buildId}\``),
-      inline: true,
-    },
-    {
-      name: 'Phase 1',
-      value: truncField(`\`${phase1.action || decision.action}\``),
-      inline: true,
-    },
+  const descLines = [
+    previousBuild
+      ? `Build \`${buildId}\` (was \`${previousBuild}\`).`
+      : `Build \`${buildId}\`.`,
+    'Frontend evidence only — this is **not** a claim that the server API changed.',
   ];
 
-  if (pending.length) {
+  const fields = [];
+
+  const evidenceLine = humanizeFrontendEvidence({
+    analyses,
+    commits,
+    phase2,
+    phase1,
+  });
+  if (evidenceLine) {
+    fields.push({
+      name: 'What we saw',
+      value: truncField(evidenceLine),
+      inline: false,
+    });
+  }
+
+  if (pending.length > 1) {
     const ids = pending
       .slice(-3)
       .map((o) => o.buildId || o.observationId || '?')
       .join(', ');
     fields.push({
-      name: 'Pending ledger',
-      value: truncField(`${pending.length} observation(s): ${ids}`),
-      inline: false,
-    });
-  }
-
-  if (commits.length) {
-    const lines = commits.slice(0, 6).map((c) => `• [${c.phase}/${c.step}] ${c.message || c.step}`);
-    if (commits.length > 6) lines.push(`… +${commits.length - 6} more`);
-    fields.push({
-      name: 'Commits',
-      value: truncField(lines.join('\n')),
-      inline: false,
-    });
-  }
-
-  if (analyses.length) {
-    const lines = analyses.slice(0, 4).map((a) => {
-      const id = a.observationId || a.buildId || '?';
-      const st = a.comparisonStatus || a.extractStatus || a.status || 'analyzed';
-      const counts = a.summary || a.counts;
-      const extra = counts ? ` (${compactCounts(counts)})` : '';
-      return `• \`${id}\`: ${st}${extra}`;
-    });
-    if (analyses.length > 4) lines.push(`… +${analyses.length - 4} more`);
-    fields.push({
-      name: 'Evidence / analysis',
-      value: truncField(lines.join('\n')),
+      name: 'Pending observations',
+      value: truncField(`${pending.length} waiting: ${ids}`),
       inline: false,
     });
   }
 
   if (prUrl) {
-    fields.push({ name: 'PR', value: truncField(prUrl), inline: false });
+    fields.push({
+      name: 'Review',
+      value: truncField(`[Open pull request](${prUrl})`),
+      inline: false,
+    });
   }
+
+  const footerBits = ['Frontend watch · evidence only'];
+  if (decision.action) footerBits.push(decision.action);
 
   /** @type {object} */
   const embed = {
-    title: truncTitle('Frontend observation update'),
-    description: truncDescription(summaryLines.join('\n')),
+    title: truncTitle(title),
+    description: truncDescription(descLines.join('\n')),
     color: COLOR_FRONTEND,
     fields,
-    footer: { text: 'Phase 1–2 frontend-watch · evidence only' },
-    timestamp: new Date().toISOString(),
+    footer: { text: truncField(footerBits.join(' · ')).slice(0, 2048) },
+    timestamp: decision.decidedAt || decision.ranAt || new Date().toISOString(),
   };
   if (prUrl) embed.url = prUrl;
 
@@ -321,6 +447,39 @@ export function buildFrontendPayload(decision, opts = {}) {
     username: opts.username || DEFAULT_USERNAME,
     embeds: [embed],
   };
+}
+
+/**
+ * @param {{
+ *   analyses?: object[],
+ *   commits?: object[],
+ *   phase2?: object,
+ *   phase1?: object,
+ * }} input
+ */
+function humanizeFrontendEvidence(input) {
+  const { analyses, commits, phase2, phase1 } = input;
+  if (phase2?.headline) return String(phase2.headline);
+  if (phase1?.comparisonSummary) return String(phase1.comparisonSummary);
+
+  const lines = [];
+  for (const a of (analyses || []).slice(0, 3)) {
+    const counts = a.summary || a.counts;
+    const human = compactCountsHuman(counts);
+    if (human) lines.push(human);
+    else if (a.comparisonStatus || a.extractStatus) {
+      lines.push(String(a.comparisonStatus || a.extractStatus));
+    }
+  }
+  if (!lines.length && commits?.length) {
+    lines.push(
+      commits
+        .slice(0, 3)
+        .map((c) => c.message || `${c.phase}/${c.step}`)
+        .join('; '),
+    );
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -332,21 +491,21 @@ export function buildAuthPayload(decision, opts = {}) {
     username: opts.username || DEFAULT_USERNAME,
     embeds: [
       {
-        title: truncTitle('API shape canary needs auth'),
+        title: truncTitle('API shape canary needs a fresh login'),
         description: truncDescription(
           [
-            'Refresh token missing/expired/rejected. Human device re-login required.',
+            'The saved refresh token is missing, expired, or was rejected.',
+            'A human needs to re-approve device login, then mirror auth back to Project secrets (never commit tokens).',
             '```',
             'make api-shape-device-login SCOPE="openid offline_access"',
             '```',
-            'Mirror auth to Project `secrets/api-shape-auth.local.json` (never commit).',
-            decision.error ? `Error: ${decision.error}` : null,
+            decision.error ? `Detail: ${decision.error}` : null,
           ]
             .filter(Boolean)
             .join('\n'),
         ),
         color: COLOR_AUTH,
-        footer: { text: 'Phase 3.1 · needs_auth' },
+        footer: { text: 'API shape canary · needs login' },
         timestamp: decision.decidedAt || new Date().toISOString(),
       },
     ],
@@ -364,10 +523,9 @@ function asPathArray(v) {
   if (Array.isArray(v)) {
     if (!v.length) return [];
     if (typeof v[0] === 'string') return v;
-    // unexpected object array — stringify paths
     return v.map((x) => (typeof x === 'string' ? x : x?.path || JSON.stringify(x)));
   }
-  if (typeof v === 'number') return []; // counts-only
+  if (typeof v === 'number') return [];
   return [];
 }
 
@@ -377,12 +535,28 @@ function asTypeChangedArray(v) {
   return [];
 }
 
-function compactCounts(counts) {
+function compactCountsHuman(counts) {
   if (typeof counts === 'string') return counts;
   if (!counts || typeof counts !== 'object') return '';
+  if (typeof counts.headline === 'string') return counts.headline;
   const bits = [];
-  for (const k of ['added', 'removed', 'changed', 'endpoints', 'ops']) {
-    if (counts[k] != null) bits.push(`${k}=${counts[k]}`);
+  if (counts.removed != null) {
+    bits.push(`${counts.removed} structured op(s) disappeared from frontend evidence`);
   }
-  return bits.join(' ') || JSON.stringify(counts).slice(0, 80);
+  if (counts.added != null) bits.push(`${counts.added} structured op(s) newly seen`);
+  if (counts.changed != null) bits.push(`${counts.changed} changed`);
+  if (counts.ops != null && !bits.length) bits.push(`${counts.ops} op(s)`);
+  if (!bits.length) {
+    for (const k of Object.keys(counts)) {
+      if (typeof counts[k] === 'string' && counts[k].length > 8) return counts[k];
+    }
+  }
+  return bits.join('; ');
+}
+
+/** Parse `a → b` style comparison summary for prior build id. */
+function parsePreviousBuild(summary) {
+  if (!summary || typeof summary !== 'string') return null;
+  const m = summary.match(/([0-9]+\.[0-9]+\.[0-9]+-\d+-[a-f0-9]+)\s*→/i);
+  return m ? m[1] : null;
 }
