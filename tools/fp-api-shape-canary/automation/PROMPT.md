@@ -47,7 +47,7 @@ Do **not** pass offline unit-test targets on routine cycles.
 1. Ensure a clean worktree. If dirty, abort and report.
 2. `git fetch origin main` (and `cursor/api-shape-observation` if present).
 3. Set `FP_API_SHAPE_AUTH_STORE` to the Project secrets path above (if unset).
-4. Run the schedule orchestrator (`--json`).
+4. Run the schedule orchestrator (`--json`). Save stdout to `/tmp/shape-decision.json`.
 5. Follow the decision JSON exactly.
 
 ## Interpreting decisions
@@ -82,6 +82,14 @@ Structural drift vs committed `artifacts/api-shape/baselines/`.
    Do **not** commit `state/api-shape-*.local*`.
 3. Open or update **one** draft PR into `main` with `prTitle` / `prBody`.
 4. Fast-forward push only. Never force-push.
+5. **Fluxer notify (change only):** after the PR URL is known, post a short webhook alert
+   (skipped quietly if the webhook secret is unset):
+   ```sh
+   node tools/fp-notify/cli.mjs notify --decision-file /tmp/shape-decision.json --pr-url "$PR_URL"
+   ```
+   Save the orchestrator JSON to that file first (or pipe via `--stdin`). Do **not** notify on
+   `noop` / `report_failure`. Optional: `--also-auth` after `needs_auth` if useful.
+   Never log `FLUXER_WEBHOOK_URL` or the contents of `secrets/fluxer-webhook.url`.
 
 ## Suggested cron (coordinator attaches subscription)
 
@@ -103,6 +111,21 @@ using this prompt; this file does not create the subscription by itself.
   store seed via `FP_API_SHAPE_AUTH_STORE`) survives across VMs. If refresh fails
   (`needs_auth`), human device re-login is required.
 
+## Fluxer webhook secret (optional)
+
+Webhook URL is **not** in git. Seed before alerts work:
+
+```sh
+# env (preferred in Automation secrets)
+export FLUXER_WEBHOOK_URL='https://…'   # never echo / commit
+
+# or Project store file (single line, HTTPS URL only)
+printf '%s\n' 'https://…' > /cursor/stores/bc-fa3a528a-7e46-4d0e-a9de-c45e84b52445/secrets/fluxer-webhook.url
+chmod 600 /cursor/stores/bc-fa3a528a-7e46-4d0e-a9de-c45e84b52445/secrets/fluxer-webhook.url
+```
+
+If unset, `fp-notify` exits 0 with `skipped: true` — monitoring must still succeed.
+
 ## Safety reminder
 
-Read-only Floatplane GETs + OAuth token endpoint only. No OpenAPI edits. No frontend-watch merge. No auto-merge. Never log Authorization / DPoP / refresh secrets.
+Read-only Floatplane GETs + OAuth token endpoint only. No OpenAPI edits. No frontend-watch merge. No auto-merge. Never log Authorization / DPoP / refresh secrets or Fluxer webhook URLs.

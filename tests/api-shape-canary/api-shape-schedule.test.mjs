@@ -241,6 +241,26 @@ describe('schedule decision', () => {
     });
     assert.match(body, /No OpenAPI/);
     assert.match(body, /content-post/);
+
+    const bodyWithPaths = formatShapePrBody({
+      decision: open,
+      captureSummary: {
+        captureId: 'c2',
+        byEndpoint: {
+          'content-post': {
+            hasDrift: true,
+            addedCount: 1,
+            removedCount: 1,
+            typeChangedCount: 0,
+            added: ['creator.newField'],
+            removed: ['creator.discoverable'],
+            typeChanged: [],
+          },
+        },
+      },
+    });
+    assert.match(bodyWithPaths, /removed `creator\.discoverable`/);
+    assert.match(bodyWithPaths, /added `creator\.newField`/);
   });
 });
 

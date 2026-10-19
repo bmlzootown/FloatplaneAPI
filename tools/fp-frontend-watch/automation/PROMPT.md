@@ -27,6 +27,7 @@ Repository: `bmlzootown/FloatplaneAPI`. Configured start branch may be `main`, b
    node tools/fp-frontend-watch/monitor-phase2-orchestrate.mjs --json
    ```
    Equivalent: `make frontend-monitor-phase2-json`.
+   Save stdout to `/tmp/frontend-decision.json`.
    Do **not** add `--run-tests`. `--with-gh` is **optional**. Prefer Cursor native GitHub/PR tools for opening/updating the PR.
 3. Follow the unified decision JSON exactly — especially `commitSequence.commits` order.
 
@@ -68,6 +69,13 @@ Push normally (fast-forward only). **Never force-push** observation or evidence 
 - After commits: open or update **one** PR into `main` with `decision.prTitle` and `decision.prBody`.
 - Body includes Phase 1 pending ledger **and** Phase 2 analysis summaries (links to MD reports; compact counts only).
 - At most one open monitoring PR.
+- **Fluxer notify (change only):** after the PR URL is known, post a short webhook alert summarizing
+  the build/evidence delta (frontend evidence only — never claim the server API changed). Skipped
+  quietly if the webhook secret is unset:
+  ```sh
+  node tools/fp-notify/cli.mjs notify --decision-file /tmp/frontend-decision.json --pr-url "$PR_URL"
+  ```
+  Do **not** notify on `noop`. Never log `FLUXER_WEBHOOK_URL` or `secrets/fluxer-webhook.url`.
 
 ### Phase 2 backlog while live unchanged
 
@@ -97,6 +105,19 @@ Orchestrator merges newest `origin/main` into the monitoring branch before watch
 - Must not claim the Floatplane HTTP/WebSocket API changed.
 - No OpenAPI/AsyncAPI/Hydravion edits.
 
+## Fluxer webhook secret (optional)
+
+Alerts use Discord-compatible Fluxer webhooks via `tools/fp-notify`. Seed (never commit):
+
+```sh
+export FLUXER_WEBHOOK_URL='https://…'
+# or
+printf '%s\n' 'https://…' > /cursor/stores/bc-fa3a528a-7e46-4d0e-a9de-c45e84b52445/secrets/fluxer-webhook.url
+chmod 600 /cursor/stores/bc-fa3a528a-7e46-4d0e-a9de-c45e84b52445/secrets/fluxer-webhook.url
+```
+
+Unset → notify skips with exit 0; monitoring still succeeds.
+
 ## Safety reminder
 
-Read-only Floatplane GETs via the existing watcher (and Phase 2 chunk fetches for same-build JS during extract). No credentialed Floatplane access. No destructive HTTP. No auto-merge. No PAT/long-lived secrets required for monitoring correctness.
+Read-only Floatplane GETs via the existing watcher (and Phase 2 chunk fetches for same-build JS during extract). No credentialed Floatplane access. No destructive HTTP. No auto-merge. No PAT/long-lived secrets required for monitoring correctness. Never log Fluxer webhook URLs.
