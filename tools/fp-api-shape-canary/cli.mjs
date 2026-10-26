@@ -33,6 +33,7 @@ import {
   TOOL_VERSION,
 } from './lib/constants.mjs';
 import { redactAuthLifetime } from './lib/auth-refresh.mjs';
+import { persistAuthToStore } from './lib/auth-store.mjs';
 import { discoverOidc, requestDeviceAuthorization, pollDeviceToken } from './lib/device-flow.mjs';
 import { generateDpopKeyPair } from './lib/dpop.mjs';
 import { diffFieldTrees, formatDiffReportMarkdown } from './lib/diff.mjs';
@@ -192,6 +193,12 @@ async function cmdDeviceLogin(args) {
   await writeTokenFile(tokenFile, token.accessToken);
   console.error(`Auth session written to ${authFile} (gitignored; mode 0600; includes DPoP keys).`);
   console.error(`Access token also at ${tokenFile} (gitignored; alone is insufficient for live DPoP APIs).`);
+  const storePersist = await persistAuthToStore({ authFile });
+  if (storePersist.persisted) {
+    console.error(`Also persisted to FP_API_SHAPE_AUTH_STORE (${storePersist.store}).`);
+  } else if (process.env.FP_API_SHAPE_AUTH_STORE) {
+    console.error(`FP_API_SHAPE_AUTH_STORE set but persist skipped: ${storePersist.reason}`);
+  }
   console.error('Do NOT commit these files.');
   const lifetime = redactAuthLifetime(token, { label: 'device-login' });
   console.error(
@@ -570,6 +577,8 @@ Env:
   FP_AUTH_FILE            Auth session JSON (access + refresh + DPoP keys)
   FP_ACCESS_TOKEN         Access token only (needs matching DPoP keys for live APIs)
   FP_TOKEN_FILE           Override bare token file path
+  FP_API_SHAPE_AUTH_STORE Durable seed path (Project store). Restored when local
+                          auth file is missing; updated after device-login/refresh.
 
 Evidence-backed OIDC defaults: issuer ${OIDC.issuer}, clientId ${OIDC.clientId}.
 fp-tv-app requires PKCE + DPoP (usesExtendedSecurity). Refresh also requires DPoP.

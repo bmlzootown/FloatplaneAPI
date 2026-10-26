@@ -1,0 +1,291 @@
+import { describe, it, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  buildNotifyPayload,
+  formatEndpointExample,
+  humanEndpointName,
+  shapeHeadline,
+  shouldNotify,
+} from '../../tools/fp-notify/lib/payloads.mjs';
+import {
+  buildBeforeAfter,
+  formatBeforeAfterField,
+  placeholderFor,
+  sanitizeSample,
+} from '../../tools/fp-notify/lib/before-after.mjs';
+import { notifyFromDecision } from '../../tools/fp-notify/lib/notify.mjs';
+import { resolveWebhookUrl, redactWebhookUrl } from '../../tools/fp-notify/lib/resolve-webhook.mjs';
+import { MAX_FIELD_VALUE } from '../../tools/fp-notify/lib/constants.mjs';
+import { truncField } from '../../tools/fp-notify/lib/truncate.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const TMP = path.join(__dirname, '.tmp-notify');
+
+before(async () => {
+  await rm(TMP, { recursive: true, force: true });
+  await mkdir(TMP, { recursive: true });
+});
+
+after(async () => {
+  await rm(TMP, { recursive: true, force: true });
+});
+
+describe('shouldNotify', () => {
+  it('notifies only on change PR actions by default', () => {
+    assert.equal(shouldNotify({ action: 'noop' }), false);
+    assert.equal(shouldNotify({ action: 'report_failure' }), false);
+    assert.equal(shouldNotify({ action: 'open_shape_pr' }), true);
+    assert.equal(shouldNotify({ action: 'update_shape_pr' }), true);
+    assert.equal(shouldNotify({ action: 'open_monitor_pr' }), true);
+    assert.equal(shouldNotify({ action: 'update_monitor_pr' }), true);
+    assert.equal(shouldNotify({ action: 'needs_auth' }), false);
+    assert.equal(shouldNotify({ action: 'needs_auth' }, { notifyOnAuth: true }), true);
+  });
+});
+
+describe('shape payload human copy + before/after', () => {
+  it('uses a human headline and illustrative before/after for removed field', () => {
+    const decision = {
+      action: 'open_shape_pr',
+      reason: 'structural_drift',
+      captureId: 'c-test',
+      decidedAt: '2026-10-19T03:00:00.000Z',
+      capture: {
+        captureId: 'c-test',
+        byEndpoint: {
+          'content-post': {
+            hasDrift: true,
+            added: ['creator.newField'],
+            removed: ['creator.discoverable'],
+            typeChanged: [{ path: 'id', from: 'string', to: 'number' }],
+            typeHints: { 'creator.discoverable': 'boolean', 'creator.newField': 'string' },
+          },
+        },
+      },
+    };
+    const built = buildNotifyPayload(decision, {
+      prUrl: 'https://github.com/bmlzootown/FloatplaneAPI/pull/13',
+    });
+    assert.equal(built.skipped, false);
+    assert.equal(built.lane, 'shape');
+    const embed = built.payload.embeds[0];
+    assert.match(embed.title, /Floatplane changed the shape of content posts/i);
+    assert.doesNotMatch(embed.title, /open_shape_pr|structural_drift/i);
+    assert.doesNotMatch(embed.description, /Reason: `structural_drift`/);
+
+    const ep = embed.fields.find((f) => /content posts/i.test(f.name));
+    assert.ok(ep);
+    assert.match(ep.value, /creator\.discoverable/);
+    assert.match(ep.value, /creator\.newField/);
+
+    const example = embed.fields.find((f) => /Example response fragment/i.test(f.name));
+    assert.ok(example);
+    assert.match(example.value, /illustrative/i);
+    assert.match(example.value, /discoverable/);
+    assert.match(example.value, /Before/i);
+    assert.match(example.value, /After/i);
+
+    // Action / capture are secondary (footer), not headline fields.
+    assert.ok(!embed.fields.some((f) => f.name === 'Action'));
+    assert.ok(!embed.fields.some((f) => f.name === 'Capture'));
+    assert.match(embed.footer.text, /open_shape_pr/);
+    assert.match(embed.footer.text, /c-test/);
+
+    assert.ok(JSON.stringify(built.payload).length < 5500);
+  });
+
+  it('headlines a single removal clearly (PR #13 style)', () => {
+    const by = {
+      'content-post': {
+        hasDrift: true,
+        added: [],
+        removed: ['creator.discoverable'],
+        typeChanged: [],
+        typeHints: { 'creator.discoverable': 'boolean' },
+      },
+    };
+    assert.equal(
+      shapeHeadline(['content-post'], by),
+      'Floatplane removed a field from content posts',
+    );
+    assert.equal(humanEndpointName('content-post'), 'content posts');
+
+    const ba = buildBeforeAfter(by['content-post']);
+    assert.equal(ba.source, 'illustrative');
+    assert.equal(ba.before?.creator?.discoverable, true);
+    assert.ok(ba.after?.creator);
+    assert.equal('discoverable' in (ba.after.creator || {}), false);
+  });
+
+  it('prefers sanitized capture samples when present', () => {
+    const ba = buildBeforeAfter({
+      hasDrift: true,
+      removed: ['creator.discoverable'],
+      sampleBefore: { creator: { id: 'abc', discoverable: true, email: 'hide@me' } },
+      sampleAfter: { creator: { id: 'abc' } },
+    });
+    assert.equal(ba.source, 'capture');
+    assert.match(ba.label, /sanitized capture/i);
+    assert.equal(ba.before.creator.email, '[redacted]');
+    assert.equal(ba.before.creator.discoverable, true);
+    assert.equal(ba.after.creator.discoverable, undefined);
+  });
+
+  it('formatEndpointExample caps path lists; field trunc respects Discord limit', () => {
+    const many = Array.from({ length: 20 }, (_, i) => `field.${i}`);
+    const text = formatEndpointExample({
+      hasDrift: true,
+      added: many,
+      removed: [],
+      typeChanged: [],
+    });
+    assert.match(text, /\+\d+ more/);
+    assert.ok(truncField(text).length <= MAX_FIELD_VALUE);
+    assert.ok(formatBeforeAfterField({ added: many, removed: [] }).length <= MAX_FIELD_VALUE);
+  });
+
+  it('sanitizeSample redacts tokens', () => {
+    const s = sanitizeSample({
+      accessToken: 'eyJhbGciOiJIUzI1NiJ9.abc.def',
+      title: 'ok',
+    });
+    assert.equal(s.accessToken, '[redacted]');
+    assert.equal(s.title, 'ok');
+    assert.equal(placeholderFor('discoverable', 'boolean'), true);
+  });
+});
+
+describe('frontend payload', () => {
+  it('summarizes build without inventing API claims', () => {
+    const built = buildNotifyPayload(
+      {
+        action: 'update_monitor_pr',
+        reason: 'phase1_drives_pr_phase2_enriches_body',
+        orchestratorId: 'phase2.3-frontend-evidence-orchestrate',
+        phase1: {
+          action: 'update_monitor_pr',
+          buildId: '4.5.25-340-92712da',
+          comparisonSummary: 'New frontend build id: 4.5.22-316-d74397b → 4.5.25-340-92712da',
+        },
+        phase2: {
+          headline: '350 structured op(s) disappeared from frontend evidence; 27 provenance move(s)',
+        },
+        pendingObservations: [{ buildId: '4.5.25-340-92712da', observationId: 'abc' }],
+        commitSequence: {
+          commits: [
+            {
+              step: 'observe',
+              phase: 'phase1',
+              message: 'Observe Floatplane frontend 4.5.25-340-92712da',
+            },
+          ],
+        },
+        analyses: [{ observationId: 'abc', comparisonStatus: 'changed', counts: { added: 2 } }],
+      },
+      { prUrl: 'https://github.com/bmlzootown/FloatplaneAPI/pull/10' },
+    );
+    assert.equal(built.skipped, false);
+    assert.equal(built.lane, 'frontend');
+    const embed = built.payload.embeds[0];
+    assert.match(embed.title, /New frontend build observed/i);
+    assert.doesNotMatch(embed.title, /open_monitor_pr|Phase/i);
+    const desc = embed.description;
+    assert.match(desc, /not.*server API/i);
+    assert.doesNotMatch(desc, /OpenAPI schema changed/i);
+    assert.match(desc, /4\.5\.25-340-92712da/);
+    assert.match(desc, /4\.5\.22-316-d74397b/);
+    assert.ok(!embed.fields.some((f) => f.name === 'Action' || f.name === 'Phase 1'));
+    const saw = embed.fields.find((f) => f.name === 'What we saw');
+    assert.ok(saw);
+    assert.match(saw.value, /350 structured/);
+  });
+});
+
+describe('resolve + notify', () => {
+  it('redacts webhook URLs', () => {
+    assert.equal(
+      redactWebhookUrl('https://fluxer.example/api/v1/webhooks/123/sekrettoken'),
+      'https://fluxer.example/…(redacted)',
+    );
+  });
+
+  it('resolves from store file and skips when unset', async () => {
+    const unset = await resolveWebhookUrl({
+      env: {},
+      storePath: path.join(TMP, 'missing.url'),
+    });
+    assert.equal(unset.ok, false);
+    assert.equal(unset.reason, 'webhook-unset');
+
+    const file = path.join(TMP, 'hook.url');
+    await writeFile(file, 'https://fluxer.example/api/v1/webhooks/1/tok\n', { mode: 0o600 });
+    const ok = await resolveWebhookUrl({ env: {}, storePath: file });
+    assert.equal(ok.ok, true);
+    assert.equal(ok.source, 'file');
+    assert.equal(ok.url.startsWith('https://'), true);
+  });
+
+  it('notifyFromDecision skips noop and posts on change', async () => {
+    const skipped = await notifyFromDecision({
+      decision: { action: 'noop' },
+      env: { FLUXER_WEBHOOK_URL: 'https://example.test/hook' },
+    });
+    assert.equal(skipped.skipped, true);
+    assert.equal(skipped.notified, false);
+
+    let postedBody = null;
+    const fetchImpl = async (url, init) => {
+      assert.match(url, /^https:\/\//);
+      postedBody = JSON.parse(init.body);
+      return { status: 204, text: async () => '' };
+    };
+
+    const posted = await notifyFromDecision({
+      decision: {
+        action: 'open_shape_pr',
+        reason: 'structural_drift',
+        captureId: 'c1',
+        capture: {
+          byEndpoint: {
+            'content-post': {
+              hasDrift: true,
+              added: [],
+              removed: ['creator.discoverable'],
+              typeChanged: [],
+              typeHints: { 'creator.discoverable': 'boolean' },
+            },
+          },
+        },
+      },
+      env: { FLUXER_WEBHOOK_URL: 'https://example.test/api/v1/webhooks/1/tok' },
+      fetchImpl,
+      prUrl: 'https://github.com/example/pr/1',
+    });
+    assert.equal(posted.notified, true);
+    assert.equal(posted.webhook.includes('redacted'), true);
+    assert.ok(!JSON.stringify(posted).includes('/tok'));
+    assert.match(postedBody.embeds[0].title, /removed a field/i);
+    const frag = postedBody.embeds[0].fields.find((f) => /Example response fragment/i.test(f.name));
+    assert.ok(frag);
+    assert.match(frag.value, /discoverable/);
+  });
+
+  it('dry-run does not call fetch', async () => {
+    let called = false;
+    const r = await notifyFromDecision({
+      decision: { action: 'open_monitor_pr', phase1: { buildId: 'x' } },
+      env: { FLUXER_WEBHOOK_URL: 'https://example.test/hook' },
+      dryRun: true,
+      fetchImpl: async () => {
+        called = true;
+        return { status: 204, text: async () => '' };
+      },
+    });
+    assert.equal(r.dryRun, true);
+    assert.equal(r.notified, true);
+    assert.equal(called, false);
+  });
+});

@@ -17,6 +17,8 @@
 /tests/frontend-evidence-diff/.tmp-diff/
 /tests/frontend-phase2-orchestrate/.tmp-phase2-orch/
 /tests/api-shape-canary/.tmp-api-shape/
+/tests/api-shape-canary/.tmp-auth-store/
+/tests/fp-notify/.tmp-notify/
 
 # Phase 3.x API shape canary — never commit tokens, DPoP keys, or raw bodies
 /state/api-shape-token.local

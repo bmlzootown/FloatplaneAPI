@@ -25,7 +25,8 @@
     "frontend-evidence": "node tools/fp-frontend-evidence/cli.mjs extract",
     "api-shape-test": "node --test tests/api-shape-canary/api-shape-canary.test.mjs",
     "api-shape-capture": "node tools/fp-api-shape-canary/cli.mjs capture",
-    "api-shape-device-login": "node tools/fp-api-shape-canary/cli.mjs device-login"
+    "api-shape-device-login": "node tools/fp-api-shape-canary/cli.mjs device-login",
+    "notify-test": "node --test tests/fp-notify/notify.test.mjs"
   },
   "repository": {
     "type": "git",

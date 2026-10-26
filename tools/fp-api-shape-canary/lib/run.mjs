@@ -21,6 +21,7 @@ import {
   refreshAccessToken,
   refreshIsExpired,
 } from './auth-refresh.mjs';
+import { persistAuthToStore, restoreAuthFromStore } from './auth-store.mjs';
 import { buildFieldTree } from './field-tree.mjs';
 import { diffBaselineMaps, formatDiffReportMarkdown } from './diff.mjs';
 import { importDpopKeyPair } from './dpop.mjs';
@@ -159,7 +160,16 @@ export async function resolveAuthSession(opts = {}) {
  * }} opts
  */
 export async function ensureAuthSession(opts = {}) {
-  const session = await resolveAuthSession(opts);
+  const env = opts.env || process.env;
+  const authFile =
+    opts.authFile || env.FP_AUTH_FILE || path.resolve(DEFAULT_AUTH_FILE);
+  const restore = await restoreAuthFromStore({
+    authFile,
+    storePath: opts.authStore || env.FP_API_SHAPE_AUTH_STORE || null,
+    env,
+  });
+
+  const session = await resolveAuthSession({ ...opts, authFile, env });
   if (!session?.accessToken) {
     return {
       ok: false,
@@ -171,12 +181,22 @@ export async function ensureAuthSession(opts = {}) {
       notes: [
         'No access token / auth file. Human device login required.',
         `Preferred schedule scope: ${OIDC.scheduleScope}`,
+        restore.restored
+          ? `Restored auth from store but session still unreadable (${restore.store}).`
+          : restore.reason === 'store-missing'
+            ? `FP_API_SHAPE_AUTH_STORE set but missing (${restore.store}).`
+            : restore.reason === 'no-store'
+              ? 'Set FP_API_SHAPE_AUTH_STORE to Project secrets/api-shape-auth.local.json for weekly VMs.'
+              : `Auth store restore: ${restore.reason}`,
       ],
     };
   }
 
   const now = opts.now || (() => Date.now());
   const notes = [];
+  if (restore.restored) {
+    notes.push(`Restored auth session from FP_API_SHAPE_AUTH_STORE (${restore.store}).`);
+  }
   if (!session.dpopKeyPair) {
     notes.push(
       'No DPoP key pair — live fp-tv-app refresh/API usually require DPoP. Prefer state/api-shape-auth.local.json.',
@@ -268,8 +288,16 @@ export async function ensureAuthSession(opts = {}) {
 
     if (session.authFile) {
       await writeAuthFile(session.authFile, merged);
+      const persisted = await persistAuthToStore({
+        authFile: session.authFile,
+        storePath: opts.authStore || env.FP_API_SHAPE_AUTH_STORE || null,
+        env,
+      });
+      if (persisted.persisted) {
+        notes.push(`Persisted rotated auth to FP_API_SHAPE_AUTH_STORE (${persisted.store}).`);
+      }
     }
-    const tokenFile = opts.tokenFile || opts.env?.FP_TOKEN_FILE;
+    const tokenFile = opts.tokenFile || env.FP_TOKEN_FILE;
     if (tokenFile) {
       await writeTokenFile(tokenFile, merged.accessToken);
     }

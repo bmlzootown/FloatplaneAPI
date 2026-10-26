@@ -22,4 +22,9 @@ Layout: `artifacts/frontend/{buildId}/{observationId}/` with content-derived obs
 
 **Phase 2.3:** `monitor-phase2-orchestrate.mjs` wraps Phase 1 sync/watch with Phase 2.1 extract + Phase 2.2 compare backlog. Observe commits stay durable if Phase 2 fails. Live subscription still uses Phase 1.2 `PROMPT.md` until review activates the proposed Phase 2.3 prompt.
 
+**Fluxer alerts (optional):** on `open_monitor_pr` / `update_monitor_pr`, Automation
+calls `tools/fp-notify` after the PR URL is known (build/evidence summary only — not
+server API claims). Seed `FLUXER_WEBHOOK_URL` or Project `secrets/fluxer-webhook.url`.
+See `tools/fp-notify/README.md`.
+
 See the repository README section **Frontend deployment watch (Phase 1)**.

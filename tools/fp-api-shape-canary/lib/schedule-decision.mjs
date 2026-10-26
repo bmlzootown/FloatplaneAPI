@@ -183,9 +183,14 @@ export function formatShapePrBody({ decision, captureSummary }) {
   const by = captureSummary.byEndpoint || {};
   for (const id of Object.keys(by).sort()) {
     const d = by[id];
+    const added = countOrLen(d.addedCount, d.added);
+    const removed = countOrLen(d.removedCount, d.removed);
+    const typeChanged = countOrLen(d.typeChangedCount, d.typeChanged);
     lines.push(
-      `- \`${id}\`: drift=${d.hasDrift} added=${d.added} removed=${d.removed} typeChanged=${d.typeChanged}`,
+      `- \`${id}\`: drift=${d.hasDrift} added=${added} removed=${removed} typeChanged=${typeChanged}`,
     );
+    const samples = sampleLines(d);
+    for (const s of samples) lines.push(`  - ${s}`);
   }
   if (!Object.keys(by).length) {
     lines.push(`- ids: ${(captureSummary.endpointIds || []).join(', ') || '(none)'}`);
@@ -209,4 +214,30 @@ export function formatShapePrBody({ decision, captureSummary }) {
   lines.push('');
   lines.push('_Separate from Phase 1/2 frontend watch schedule._');
   return `${lines.join('\n')}\n`;
+}
+
+function countOrLen(count, arrOrNum) {
+  if (typeof count === 'number') return count;
+  if (Array.isArray(arrOrNum)) return arrOrNum.length;
+  if (typeof arrOrNum === 'number') return arrOrNum;
+  return 0;
+}
+
+/** Compact path samples for PR body (capped). */
+function sampleLines(d, cap = 6) {
+  const out = [];
+  const removed = Array.isArray(d.removed) ? d.removed : [];
+  const added = Array.isArray(d.added) ? d.added : [];
+  const typed = Array.isArray(d.typeChanged) ? d.typeChanged : [];
+  for (const p of removed.slice(0, cap)) out.push(`removed \`${p}\``);
+  for (const p of added.slice(0, Math.max(0, cap - out.length))) out.push(`added \`${p}\``);
+  for (const t of typed.slice(0, Math.max(0, cap - out.length))) {
+    if (typeof t === 'string') out.push(`type \`${t}\``);
+    else out.push(`type \`${t.path}\`: ${fmtType(t.from)} → ${fmtType(t.to)}`);
+  }
+  return out;
+}
+
+function fmtType(t) {
+  return Array.isArray(t) ? t.join('|') : String(t);
 }

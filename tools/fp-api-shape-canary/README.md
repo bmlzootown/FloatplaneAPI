@@ -31,6 +31,10 @@ DPoP private JWK). Bare `state/api-shape-token.local` alone is not enough for li
 make api-shape-device-login SCOPE="openid offline_access"
 # → writes state/api-shape-auth.local.json (0600)
 
+# Weekly VMs: durable seed in the Project Agent Store (never git)
+export FP_API_SHAPE_AUTH_STORE=/cursor/stores/<project>/secrets/api-shape-auth.local.json
+# ensureAuth restores store → state/ when local missing; persists after refresh
+
 make api-shape-ensure-auth      # refresh if access near expiry
 make api-shape-probe-refresh    # redacted rolling-refresh lifetime evidence
 make api-shape-capture
@@ -38,7 +42,13 @@ make api-shape-schedule-json    # capture → diff → decision JSON
 ```
 
 Scheduled Automation prompt: `automation/PROMPT.md` (coordinator attaches timer;
-suggested cron `0 3 * * 1`).
+suggested cron `0 3 * * 1`). See that prompt for this Project’s concrete
+`FP_API_SHAPE_AUTH_STORE` secrets path.
+
+**Fluxer alerts (optional):** on `open_shape_pr` / `update_shape_pr`, Automation
+calls `tools/fp-notify` after the PR URL is known. Seed
+`FLUXER_WEBHOOK_URL` or Project `secrets/fluxer-webhook.url` (never commit).
+See `tools/fp-notify/README.md`.
 
 ## Allowlist (read-only)
 

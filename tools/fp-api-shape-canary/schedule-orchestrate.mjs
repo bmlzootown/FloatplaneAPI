@@ -32,12 +32,82 @@ import {
   TOOL_VERSION,
 } from './lib/constants.mjs';
 import { decideShapeMonitorAction, formatShapePrBody } from './lib/schedule-decision.mjs';
+import { flattenFieldTree } from './lib/field-tree.mjs';
 import { ensureAuthSession, runCapture } from './lib/run.mjs';
+import { loadBaselines } from './lib/store.mjs';
+import { notifyFromDecision } from '../fp-notify/lib/notify.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const ORCHESTRATOR_ID = 'fp-api-shape-schedule';
-const ORCHESTRATOR_VERSION = '3.1.0';
+const ORCHESTRATOR_VERSION = '3.1.2';
+/** Cap path samples embedded in decision JSON for Fluxer alerts / PR bodies. */
+const PATH_SAMPLE_CAP = 12;
+
+/**
+ * Counts + capped path samples for alerts (no response bodies).
+ * Optional typeHints help Fluxer synthesize illustrative before/after JSON.
+ * @param {object} d
+ * @param {{ baselineTree?: object, currentTree?: object }} [trees]
+ */
+function summarizeEndpointDiff(d, trees = {}) {
+  const added = d.added || [];
+  const removed = d.removed || [];
+  const typeChanged = d.typeChanged || [];
+  const typeHints = collectTypeHints({
+    added: added.slice(0, PATH_SAMPLE_CAP),
+    removed: removed.slice(0, PATH_SAMPLE_CAP),
+    typeChanged: typeChanged.slice(0, PATH_SAMPLE_CAP),
+    baselineTree: trees.baselineTree,
+    currentTree: trees.currentTree,
+  });
+  return {
+    hasDrift: Boolean(d.hasDrift),
+    addedCount: added.length,
+    removedCount: removed.length,
+    typeChangedCount: typeChanged.length,
+    // Keep array fields for notifier examples; also expose counts for older readers.
+    added: added.slice(0, PATH_SAMPLE_CAP),
+    removed: removed.slice(0, PATH_SAMPLE_CAP),
+    typeChanged: typeChanged.slice(0, PATH_SAMPLE_CAP),
+    truncated:
+      added.length > PATH_SAMPLE_CAP ||
+      removed.length > PATH_SAMPLE_CAP ||
+      typeChanged.length > PATH_SAMPLE_CAP,
+    note: d.note || undefined,
+    ...(Object.keys(typeHints).length ? { typeHints } : {}),
+  };
+}
+
+/**
+ * Map changed paths → JSON type from baseline (removed) or current (added) field-trees.
+ * @param {{
+ *   added: string[],
+ *   removed: string[],
+ *   typeChanged: object[],
+ *   baselineTree?: object,
+ *   currentTree?: object,
+ * }} input
+ */
+function collectTypeHints(input) {
+  /** @type {Record<string, string|string[]>} */
+  const hints = {};
+  const fromFlat = input.baselineTree ? flattenFieldTree(input.baselineTree) : {};
+  const toFlat = input.currentTree ? flattenFieldTree(input.currentTree) : {};
+  for (const path of input.removed || []) {
+    if (fromFlat[path]?.type != null) hints[path] = fromFlat[path].type;
+  }
+  for (const path of input.added || []) {
+    if (toFlat[path]?.type != null) hints[path] = toFlat[path].type;
+  }
+  for (const t of input.typeChanged || []) {
+    if (typeof t === 'object' && t?.path) {
+      if (t.from != null) hints[`${t.path}__from`] = t.from;
+      if (t.to != null) hints[`${t.path}__to`] = t.to;
+    }
+  }
+  return hints;
+}
 
 async function main(argv) {
   const args = parseArgs(argv);
@@ -56,7 +126,11 @@ async function main(argv) {
       nowIso: args.nowIso || new Date().toISOString(),
     });
     attachPrArtifacts(decision);
-    emit(wrap(decision), args);
+    const wrapped = wrap(decision);
+    if (args.notify) {
+      wrapped.notify = await maybeNotify(wrapped, args);
+    }
+    emit(wrapped, args);
     process.exit(mapExit(decision));
   }
 
@@ -78,7 +152,11 @@ async function main(argv) {
       nowIso: new Date().toISOString(),
     });
     attachPrArtifacts(decision);
-    emit(wrap(decision), args);
+    const wrapped = wrap(decision);
+    if (args.notify) {
+      wrapped.notify = await maybeNotify(wrapped, args);
+    }
+    emit(wrapped, args);
     process.exit(mapExit(decision));
   }
 
@@ -92,18 +170,27 @@ async function main(argv) {
     dryRun: Boolean(args.dryRun),
   });
 
+  const baselines = await loadBaselines(artifactsRoot).catch(() => ({}));
   const decision = decideShapeMonitorAction({
     auth,
-    capture: summarizeCapture(capture),
+    capture: summarizeCapture(capture, baselines),
     openShapePrs: args.openPrsJson || [],
     nowIso: new Date().toISOString(),
   });
   attachPrArtifacts(decision, capture);
-  emit(wrap(decision, { auth, capture }), args);
+  const wrapped = wrap(decision, { auth, capture });
+  if (args.notify) {
+    wrapped.notify = await maybeNotify(wrapped, args);
+  }
+  emit(wrapped, args);
   process.exit(mapExit(decision));
 }
 
-function summarizeCapture(capture) {
+/**
+ * @param {object} capture
+ * @param {Record<string, object>} [baselines]
+ */
+function summarizeCapture(capture, baselines = {}) {
   return {
     exitCode: capture.exitCode,
     captureId: capture.captureId,
@@ -117,12 +204,10 @@ function summarizeCapture(capture) {
       ? Object.fromEntries(
           Object.entries(capture.diff.byEndpoint).map(([id, d]) => [
             id,
-            {
-              hasDrift: d.hasDrift,
-              added: d.added?.length || 0,
-              removed: d.removed?.length || 0,
-              typeChanged: d.typeChanged?.length || 0,
-            },
+            summarizeEndpointDiff(d, {
+              baselineTree: baselines[id],
+              currentTree: capture.trees?.[id],
+            }),
           ]),
         )
       : {},
@@ -133,6 +218,24 @@ function summarizeCapture(capture) {
       auth: c.auth,
     })),
   };
+}
+
+async function maybeNotify(decision, args) {
+  try {
+    return await notifyFromDecision({
+      decision,
+      prUrl: args.prUrl || decision.existingPr?.url || null,
+      notifyOnAuth: Boolean(args.notifyAuth),
+      dryRun: Boolean(args.notifyDryRun),
+    });
+  } catch (err) {
+    return {
+      notified: false,
+      skipped: true,
+      reason: 'notify-error',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 function attachPrArtifacts(decision, capture = null) {
@@ -217,6 +320,10 @@ Options:
   --capture-json <json>  For --decision-only
   --auth-json <json>     For --decision-only
   --open-prs-json <json> Injected open shape PRs [{number,url,headRefName}]
+  --notify               After decision: Fluxer webhook on change (see tools/fp-notify)
+  --notify-auth          Also notify on needs_auth
+  --notify-dry-run       Build/resolve notify without POSTing
+  --pr-url <url>         PR URL to attach when notifying
   --help
 `);
 }
@@ -230,6 +337,10 @@ function parseArgs(argv) {
     includeVideo: false,
     withUnauthList: false,
     decisionOnly: false,
+    notify: false,
+    notifyAuth: false,
+    notifyDryRun: false,
+    prUrl: null,
     authFile: null,
     tokenFile: null,
     artifacts: null,
@@ -248,6 +359,12 @@ function parseArgs(argv) {
     else if (a === '--include-video') args.includeVideo = true;
     else if (a === '--with-unauth-list') args.withUnauthList = true;
     else if (a === '--decision-only') args.decisionOnly = true;
+    else if (a === '--notify') args.notify = true;
+    else if (a === '--notify-auth') args.notifyAuth = true;
+    else if (a === '--notify-dry-run') {
+      args.notify = true;
+      args.notifyDryRun = true;
+    } else if (a === '--pr-url') args.prUrl = rest.shift();
     else if (a === '--auth-file') args.authFile = rest.shift();
     else if (a === '--token-file') args.tokenFile = rest.shift();
     else if (a === '--artifacts') args.artifacts = rest.shift();
