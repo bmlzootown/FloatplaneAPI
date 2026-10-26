@@ -21,7 +21,12 @@ import {
 } from '../../tools/fp-notify/lib/before-after.mjs';
 import { formatObservedOn } from '../../tools/fp-notify/lib/endpoints.mjs';
 import { notifyFromDecision } from '../../tools/fp-notify/lib/notify.mjs';
-import { resolveWebhookUrl, redactWebhookUrl } from '../../tools/fp-notify/lib/resolve-webhook.mjs';
+import {
+  resolveWebhookUrl,
+  resolveWebhookTargets,
+  selectWebhookTargetIds,
+  redactWebhookUrl,
+} from '../../tools/fp-notify/lib/resolve-webhook.mjs';
 import { MAX_FIELD_VALUE } from '../../tools/fp-notify/lib/constants.mjs';
 import {
   formatAbsoluteTimestampFooter,
@@ -335,6 +340,15 @@ describe('resolve + notify', () => {
     );
   });
 
+  it('selectWebhookTargetIds: production=all, --test=fluxer only', () => {
+    assert.deepEqual(selectWebhookTargetIds(null).ids, ['fluxer', 'discord']);
+    assert.deepEqual(selectWebhookTargetIds('all').ids, ['fluxer', 'discord']);
+    assert.deepEqual(selectWebhookTargetIds(null, { test: true }).ids, ['fluxer']);
+    assert.deepEqual(selectWebhookTargetIds('test').ids, ['fluxer']);
+    assert.deepEqual(selectWebhookTargetIds('discord').ids, ['discord']);
+    assert.deepEqual(selectWebhookTargetIds('fluxer,discord').ids, ['fluxer', 'discord']);
+  });
+
   it('resolves from store file and skips when unset', async () => {
     const unset = await resolveWebhookUrl({
       env: {},
@@ -351,10 +365,44 @@ describe('resolve + notify', () => {
     assert.equal(ok.url.startsWith('https://'), true);
   });
 
+  it('resolveWebhookTargets fans out production and keeps --test on Fluxer', async () => {
+    const fluxer = path.join(TMP, 'fluxer.url');
+    const discord = path.join(TMP, 'discord.url');
+    await writeFile(fluxer, 'https://fluxer.example/api/v1/webhooks/1/tok\n', { mode: 0o600 });
+    await writeFile(discord, 'https://discord.com/api/webhooks/1/tok\n', { mode: 0o600 });
+
+    const all = await resolveWebhookTargets({
+      env: {},
+      storePath: fluxer,
+      discordStorePath: discord,
+      targets: 'all',
+    });
+    assert.equal(all.ok, true);
+    assert.equal(all.mode, 'all');
+    assert.deepEqual(
+      all.targets.map((t) => t.id),
+      ['fluxer', 'discord'],
+    );
+
+    const testOnly = await resolveWebhookTargets({
+      env: {},
+      storePath: fluxer,
+      discordStorePath: discord,
+      test: true,
+    });
+    assert.equal(testOnly.ok, true);
+    assert.equal(testOnly.mode, 'test');
+    assert.deepEqual(
+      testOnly.targets.map((t) => t.id),
+      ['fluxer'],
+    );
+  });
+
   it('notifyFromDecision skips noop and posts on change', async () => {
     const skipped = await notifyFromDecision({
       decision: { action: 'noop' },
       env: { FLUXER_WEBHOOK_URL: 'https://example.test/hook' },
+      targets: 'fluxer',
     });
     assert.equal(skipped.skipped, true);
     assert.equal(skipped.notified, false);
@@ -384,6 +432,7 @@ describe('resolve + notify', () => {
         },
       },
       env: { FLUXER_WEBHOOK_URL: 'https://example.test/api/v1/webhooks/1/tok' },
+      targets: 'fluxer',
       fetchImpl,
     });
     assert.equal(posted.notified, true);
@@ -397,11 +446,58 @@ describe('resolve + notify', () => {
     assert.match(before.value, /discoverable/);
   });
 
+  it('production notify fans out to Fluxer + Discord; --test stays Fluxer-only', async () => {
+    /** @type {string[]} */
+    const urls = [];
+    const fetchImpl = async (url) => {
+      urls.push(url);
+      return { status: 204, text: async () => '' };
+    };
+    const decision = {
+      action: 'open_monitor_pr',
+      phase1: { buildId: '4.5.26-355-797bc04', previousBuildId: '4.5.25-340-92712da' },
+      decidedAt: '2026-10-26T18:00:00.000Z',
+    };
+    const env = {
+      FLUXER_WEBHOOK_URL: 'https://fluxer.example/api/v1/webhooks/1/tok',
+      DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/2/tok',
+    };
+
+    const live = await notifyFromDecision({ decision, env, fetchImpl });
+    assert.equal(live.notified, true);
+    assert.equal(live.targetMode, 'all');
+    assert.deepEqual(
+      live.targets.map((t) => t.id),
+      ['fluxer', 'discord'],
+    );
+    assert.equal(urls.length, 2);
+    assert.match(urls[0], /fluxer\.example/);
+    assert.match(urls[1], /discord\.com/);
+    assert.ok(!JSON.stringify(live).includes('/tok'));
+
+    urls.length = 0;
+    const smoke = await notifyFromDecision({
+      decision,
+      env,
+      test: true,
+      fetchImpl,
+    });
+    assert.equal(smoke.notified, true);
+    assert.equal(smoke.targetMode, 'test');
+    assert.deepEqual(
+      smoke.targets.map((t) => t.id),
+      ['fluxer'],
+    );
+    assert.equal(urls.length, 1);
+    assert.match(urls[0], /fluxer\.example/);
+  });
+
   it('dry-run does not call fetch', async () => {
     let called = false;
     const r = await notifyFromDecision({
       decision: { action: 'open_monitor_pr', phase1: { buildId: 'x' }, decidedAt: '2026-10-26T12:00:00.000Z' },
       env: { FLUXER_WEBHOOK_URL: 'https://example.test/hook' },
+      targets: 'fluxer',
       dryRun: true,
       fetchImpl: async () => {
         called = true;

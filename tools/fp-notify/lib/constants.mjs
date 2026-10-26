@@ -24,25 +24,53 @@ export const MAX_EMBED_FIELDS = 25;
 export const MAX_EMBEDS_PER_MESSAGE = 10;
 
 export const TOOL_ID = 'fp-notify';
-export const TOOL_VERSION = '1.4.1';
+export const TOOL_VERSION = '1.5.0';
 
 export const DEFAULT_USERNAME = 'FloatplaneAPI Watch';
 
-/** Env vars checked (first non-empty wins) for the webhook URL string */
+/** Known webhook target ids */
+export const WEBHOOK_TARGET_FLUXER = 'fluxer';
+export const WEBHOOK_TARGET_DISCORD = 'discord';
+export const WEBHOOK_TARGET_IDS = [WEBHOOK_TARGET_FLUXER, WEBHOOK_TARGET_DISCORD];
+
+/**
+ * Production / live notify: fan out to every configured target.
+ * Test / draft / preview / smoke format posts: Fluxer only (never Discord).
+ */
+export const TARGET_MODE_ALL = 'all';
+export const TARGET_MODE_TEST = 'test';
+
+/** Env vars checked (first non-empty wins) for the Fluxer webhook URL string */
 export const WEBHOOK_URL_ENV_KEYS = ['FLUXER_WEBHOOK_URL', 'FP_FLUXER_WEBHOOK_URL'];
 
-/** Env vars for a file that contains only the webhook URL (trimmed) */
+/** Env vars for a file that contains only the Fluxer webhook URL (trimmed) */
 export const WEBHOOK_FILE_ENV_KEYS = [
   'FLUXER_WEBHOOK_URL_FILE',
   'FP_FLUXER_WEBHOOK_FILE',
 ];
 
+/** Env vars for Discord production webhook URL string */
+export const DISCORD_WEBHOOK_URL_ENV_KEYS = [
+  'DISCORD_WEBHOOK_URL',
+  'FP_DISCORD_WEBHOOK_URL',
+];
+
+/** Env vars for a file that contains only the Discord webhook URL */
+export const DISCORD_WEBHOOK_FILE_ENV_KEYS = [
+  'DISCORD_WEBHOOK_URL_FILE',
+  'FP_DISCORD_WEBHOOK_FILE',
+];
+
 /**
- * Default Project-store secret path (this Floatplane API Watch project).
+ * Default Project-store secret path for Fluxer (this Floatplane API Watch project).
  * Prefer env override in other environments.
  */
 export const DEFAULT_WEBHOOK_STORE_PATH =
   '/cursor/stores/bc-fa3a528a-7e46-4d0e-a9de-c45e84b52445/secrets/fluxer-webhook.url';
+
+/** Default Project-store secret path for Discord production alerts */
+export const DEFAULT_DISCORD_WEBHOOK_STORE_PATH =
+  '/cursor/stores/bc-fa3a528a-7e46-4d0e-a9de-c45e84b52445/secrets/discord-webhook.url';
 
 /** Actions that warrant a change notification (not noop/failure). */
 export const CHANGE_NOTIFY_ACTIONS = new Set([

@@ -45,10 +45,10 @@ Scheduled Automation prompt: `automation/PROMPT.md` (coordinator attaches timer;
 suggested cron `0 3 * * 1`). See that prompt for this Project’s concrete
 `FP_API_SHAPE_AUTH_STORE` secrets path.
 
-**Fluxer alerts (optional):** on `open_shape_pr` / `update_shape_pr`, Automation
-calls `tools/fp-notify` after the PR URL is known. Seed
-`FLUXER_WEBHOOK_URL` or Project `secrets/fluxer-webhook.url` (never commit).
-See `tools/fp-notify/README.md`.
+**Fluxer + Discord alerts (optional):** on `open_shape_pr` / `update_shape_pr`,
+Automation calls `tools/fp-notify` after the PR URL is known (live → both webhooks;
+`--test` → Fluxer only). Seed `FLUXER_WEBHOOK_URL` / `DISCORD_WEBHOOK_URL` or
+Project `secrets/{fluxer,discord}-webhook.url` (never commit). See `tools/fp-notify/README.md`.
 
 ## Allowlist (read-only)
 

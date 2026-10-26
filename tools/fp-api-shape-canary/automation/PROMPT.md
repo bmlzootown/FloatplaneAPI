@@ -93,10 +93,12 @@ Structural drift vs committed `artifacts/api-shape/baselines/`.
    Skipped quietly if the webhook secret is unset:
    ```sh
    node tools/fp-notify/cli.mjs notify --decision-file /tmp/shape-decision.json --pr-url "$PR_URL"
+   # Default live notify fans out to Fluxer + Discord. Format/smoke experiments:
+   # add --test (Fluxer only — never Discord). Never log webhook URLs/tokens.
    ```
    Save the orchestrator JSON to that file first (or pipe via `--stdin`). Do **not** notify on
    `noop` / `report_failure`. Optional: `--also-auth` after `needs_auth` if useful.
-   Never log `FLUXER_WEBHOOK_URL` or the contents of `secrets/fluxer-webhook.url`.
+   Never log `FLUXER_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL`, or `secrets/{fluxer,discord}-webhook.url`.
 
 ## Suggested cron (coordinator attaches subscription)
 
