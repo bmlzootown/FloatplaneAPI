@@ -1,0 +1,1 @@
+import{m as e,n as t}from"./aWszMqew.js";e();var n={visuallyHidden:`_visuallyHidden_n436e_1`},r=t();function i(e){return(0,r.jsx)(`span`,{className:n.visuallyHidden,style:e.style,children:`\u00A0${e.children}\u00A0`})}export{i as t};

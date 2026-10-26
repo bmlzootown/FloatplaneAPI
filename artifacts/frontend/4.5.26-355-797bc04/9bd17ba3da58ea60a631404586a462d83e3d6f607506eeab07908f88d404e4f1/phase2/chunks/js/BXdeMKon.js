@@ -1,0 +1,1 @@
+import{m as e,n as t}from"./aWszMqew.js";import{F as n}from"./index-Dxy9c0et.js";import{_ as r,n as i,r as a}from"./B2UiXWpX.js";import{t as o}from"./K__XfjW1.js";e();var s=t(),c=r(()=>{let e=n.pagesConfigs.creatorList?.title||`Browse Creators`;return i(e)((0,s.jsx)(a,{children:(0,s.jsx)(o,{pageTitle:e,showSearchBar:!0})}))});export{c as default};
