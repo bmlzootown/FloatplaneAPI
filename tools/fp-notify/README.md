@@ -8,8 +8,8 @@ Fluxer webhooks accept Discord-compatible JSON (`content`, `embeds`, …).
 
 Alerts are written for a human skim: plain-language title, short summary,
 `Observed on: /api/v3/…` (shape) or build id change (frontend), and (for shape)
-before → after JSON. **No PR review section.** Footer is a Discord relative/local
-timestamp only (`<t:unix:R> · <t:unix:f>`).
+before → after JSON. **No PR review section.** Footer is a plain absolute UTC
+timestamp only (e.g. `2026-10-26 03:01:16 UTC`) — Fluxer does not render Discord `<t:>` tags.
 
 ## Configure webhook URL (never commit)
 
@@ -68,7 +68,7 @@ make notify-test
           "inline": true
         }
       ],
-      "footer": { "text": "<t:1729911676:R> · <t:1729911676:f>" },
+      "footer": { "text": "2026-10-26 03:01:16 UTC" },
       "timestamp": "2026-10-26T03:01:16.000Z"
     }
   ]

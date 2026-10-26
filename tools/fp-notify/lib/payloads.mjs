@@ -2,7 +2,7 @@
  * Build Discord/Fluxer-compatible webhook payloads from monitor decisions.
  *
  * Human-first copy: plain-language summary + observed API path / build id.
- * No PR review section; footer is Discord relative/local timestamp only.
+ * No PR review section; footer is a plain absolute UTC timestamp only.
  * Shape: before → after sanitized JSON (or illustrative fallback).
  * Frontend: build change + brief summary — never invent server API claims.
  */
@@ -21,7 +21,7 @@ import { formatBeforeAfterFields } from './before-after.mjs';
 import { formatObservedOn } from './endpoints.mjs';
 import { packShapePayloads } from './pack-embeds.mjs';
 import {
-  formatDiscordTimestampFooter,
+  formatAbsoluteTimestampFooter,
   toEmbedTimestampIso,
 } from './time.mjs';
 import { formatPathList, truncDescription, truncField, truncTitle } from './truncate.mjs';
@@ -176,7 +176,7 @@ export function buildShapePayloads(decision, opts = {}) {
     });
   }
 
-  const footerText = formatDiscordTimestampFooter(eventTime);
+  const footerText = formatAbsoluteTimestampFooter(eventTime);
 
   const { payloads } = packShapePayloads({
     title: headline,
@@ -454,7 +454,7 @@ export function buildFrontendPayload(decision, opts = {}) {
     phase1.observedAt ||
     phase1.decidedAt ||
     null;
-  const footerText = formatDiscordTimestampFooter(eventTime);
+  const footerText = formatAbsoluteTimestampFooter(eventTime);
 
   /** @type {object} */
   const embed = {

@@ -24,7 +24,7 @@ export const MAX_EMBED_FIELDS = 25;
 export const MAX_EMBEDS_PER_MESSAGE = 10;
 
 export const TOOL_ID = 'fp-notify';
-export const TOOL_VERSION = '1.4.0';
+export const TOOL_VERSION = '1.4.1';
 
 export const DEFAULT_USERNAME = 'FloatplaneAPI Watch';
 

@@ -24,7 +24,7 @@ import { notifyFromDecision } from '../../tools/fp-notify/lib/notify.mjs';
 import { resolveWebhookUrl, redactWebhookUrl } from '../../tools/fp-notify/lib/resolve-webhook.mjs';
 import { MAX_FIELD_VALUE } from '../../tools/fp-notify/lib/constants.mjs';
 import {
-  formatDiscordTimestampFooter,
+  formatAbsoluteTimestampFooter,
   toUnixSeconds,
 } from '../../tools/fp-notify/lib/time.mjs';
 import { truncField } from '../../tools/fp-notify/lib/truncate.mjs';
@@ -54,13 +54,13 @@ describe('shouldNotify', () => {
   });
 });
 
-describe('discord timestamps', () => {
-  it('parses capture ids and formats relative/local tags', () => {
+describe('absolute timestamps', () => {
+  it('parses capture ids and formats plain UTC footers', () => {
     const unix = toUnixSeconds('2026-10-26T03-01-16-836Z');
     assert.equal(unix, Math.floor(Date.parse('2026-10-26T03:01:16.836Z') / 1000));
-    const footer = formatDiscordTimestampFooter('2026-10-26T03-01-16-836Z');
-    assert.match(footer, new RegExp(`<t:${unix}:R>`));
-    assert.match(footer, new RegExp(`<t:${unix}:f>`));
+    const footer = formatAbsoluteTimestampFooter('2026-10-26T03-01-16-836Z');
+    assert.equal(footer, '2026-10-26 03:01:16 UTC');
+    assert.doesNotMatch(footer, /<t:/);
   });
 });
 
@@ -110,9 +110,8 @@ describe('shape payload human copy + before/after', () => {
 
     assert.ok(!embed.fields.some((f) => /Review|Open pull request/i.test(f.name)));
     assert.ok(!embed.url);
-    assert.match(embed.footer.text, /<t:\d+:R>/);
-    assert.match(embed.footer.text, /<t:\d+:f>/);
-    assert.doesNotMatch(embed.footer.text, /api shape canary|read-only|open_shape_pr|update_shape_pr/i);
+    assert.match(embed.footer.text, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$/);
+    assert.doesNotMatch(embed.footer.text, /<t:|api shape canary|read-only|open_shape_pr|update_shape_pr/i);
 
     assert.ok(JSON.stringify(built.payload).length < 8000);
   });
@@ -307,8 +306,8 @@ describe('frontend payload', () => {
     assert.doesNotMatch(desc, /not_applicable|Pending observations/i);
     assert.ok(!embed.fields.some((f) => /What we saw|Pending|Review/i.test(f.name)));
     assert.ok(!embed.url);
-    assert.match(embed.footer.text, /<t:\d+:R>/);
-    assert.doesNotMatch(embed.footer.text, /Frontend watch|evidence only|update_monitor_pr/i);
+    assert.match(embed.footer.text, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$/);
+    assert.doesNotMatch(embed.footer.text, /<t:|Frontend watch|evidence only|update_monitor_pr/i);
   });
 
   it('omits junk analysis status lines like complete / not_applicable', () => {
