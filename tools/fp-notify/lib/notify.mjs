@@ -1,13 +1,16 @@
 /**
  * High-level: resolve webhook target(s) → build payload from decision → POST on change.
  *
- * Production / live: fan out to Fluxer + Discord (same payload).
+ * Production / live: fan out to Fluxer + Discord.
+ * Discord gets an extra public-safe sanitize pass (user-self / subscription PII);
+ * Fluxer (private) keeps the richer private samples.
  * Test / draft / smoke (`test: true` or targets=test): Fluxer only — never Discord.
  */
 
 import { buildNotifyPayload, shouldNotify } from './payloads.mjs';
 import { postWebhook } from './post.mjs';
 import { resolveWebhookTargets } from './resolve-webhook.mjs';
+import { payloadForWebhookTarget } from './discord-public-sanitize.mjs';
 import { TOOL_ID, TOOL_VERSION } from './constants.mjs';
 
 /**
@@ -108,7 +111,7 @@ export async function notifyFromDecision(opts) {
     for (const payload of payloads) {
       const posted = await postWebhook({
         url: target.url,
-        payload,
+        payload: payloadForWebhookTarget(target.id, payload),
         fetchImpl: opts.fetchImpl,
         dryRun: opts.dryRun,
       });

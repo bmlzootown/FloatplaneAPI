@@ -27,6 +27,11 @@ import {
   selectWebhookTargetIds,
   redactWebhookUrl,
 } from '../../tools/fp-notify/lib/resolve-webhook.mjs';
+import {
+  sanitizeValueForDiscordPublic,
+  sanitizePayloadForDiscordPublic,
+  payloadForWebhookTarget,
+} from '../../tools/fp-notify/lib/discord-public-sanitize.mjs';
 import { MAX_FIELD_VALUE } from '../../tools/fp-notify/lib/constants.mjs';
 import {
   formatAbsoluteTimestampFooter,
@@ -507,5 +512,163 @@ describe('resolve + notify', () => {
     assert.equal(r.dryRun, true);
     assert.equal(r.notified, true);
     assert.equal(called, false);
+  });
+});
+
+describe('Discord public sanitization', () => {
+  it('censors user-self identity on Discord only', () => {
+    const userSelf = {
+      id: '5c3014455fb1a5617b77978e',
+      username: 'bmlzootown',
+      displayName: 'Brandon',
+      email: '[redacted]',
+      profileImage: { path: 'https://example/avatar.png' },
+      isModerator: false,
+    };
+    const cleaned = sanitizeValueForDiscordPublic(userSelf);
+    assert.equal(cleaned.id, '[redacted-id]');
+    assert.equal(cleaned.username, '[redacted]');
+    assert.equal(cleaned.displayName, '[redacted]');
+    assert.equal(cleaned.email, '[redacted]');
+    assert.deepEqual(cleaned.profileImage, { redacted: true });
+    assert.equal(cleaned.isModerator, '[redacted]');
+  });
+
+  it('censors subscription dates, prices, and creator ids', () => {
+    const sub = {
+      startDate: '2025-07-07T23:02:07.673Z',
+      endDate: '2026-07-07T23:02:07.673Z',
+      paymentID: null,
+      interval: 'year',
+      creator: '686c49c403ee2657d069c916',
+      plan: {
+        id: 'plan1',
+        title: 'Cool Plan',
+        price: '5.00',
+        priceYearly: '50.00',
+        currency: 'USD',
+        creator: '686c49c403ee2657d069c916',
+      },
+    };
+    const cleaned = sanitizeValueForDiscordPublic(sub);
+    assert.equal(cleaned.startDate, '[redacted]');
+    assert.equal(cleaned.endDate, '[redacted]');
+    assert.equal(cleaned.creator, '[redacted-id]');
+    assert.equal(cleaned.plan.price, '[redacted]');
+    assert.equal(cleaned.plan.priceYearly, '[redacted]');
+    assert.equal(cleaned.plan.creator, '[redacted-id]');
+    assert.equal(cleaned.plan.title, 'Cool Plan');
+  });
+
+  it('keeps public content-* LTT creator objects intact', () => {
+    const post = {
+      id: 'hkaeIJNlps',
+      title: 'How to Switch to Linux',
+      channel: {
+        creator: '59f94c0bdd241b70349eb72b',
+        title: 'Floatplane',
+      },
+      creator: {
+        id: '59f94c0bdd241b70349eb72b',
+        owner: '59f94c0bdd241b70349eb723',
+        title: 'LinusTechTips',
+      },
+    };
+    const cleaned = sanitizeValueForDiscordPublic(post);
+    assert.equal(cleaned.title, 'How to Switch to Linux');
+    assert.equal(cleaned.creator.title, 'LinusTechTips');
+    assert.equal(cleaned.creator.id, '59f94c0bdd241b70349eb72b');
+    // Bare channel.creator on content is a public creator ref — not a subscription row
+    assert.equal(cleaned.channel.creator, '59f94c0bdd241b70349eb72b');
+  });
+
+  it('applies extra sanitize to Discord payloads, not Fluxer', () => {
+    const payload = {
+      username: 'FloatplaneAPI Watch',
+      embeds: [
+        {
+          title: 'test',
+          fields: [
+            {
+              name: 'Before (live sanitized)',
+              value:
+                '```json\n' +
+                JSON.stringify(
+                  {
+                    username: 'secretuser',
+                    displayName: 'Secret',
+                    id: '5c3014455fb1a5617b77978e',
+                  },
+                  null,
+                  2,
+                ) +
+                '\n```',
+            },
+          ],
+        },
+      ],
+    };
+    const discord = sanitizePayloadForDiscordPublic(payload);
+    assert.match(discord.embeds[0].fields[0].value, /\[redacted\]/);
+    assert.match(discord.embeds[0].fields[0].value, /\[redacted-id\]/);
+    assert.doesNotMatch(discord.embeds[0].fields[0].value, /secretuser/);
+
+    const fluxer = payloadForWebhookTarget('fluxer', payload);
+    assert.match(fluxer.embeds[0].fields[0].value, /secretuser/);
+    assert.equal(payloadForWebhookTarget('discord', payload).embeds[0].fields[0].value, discord.embeds[0].fields[0].value);
+  });
+
+  it('fan-out posts Discord-sanitized body while Fluxer keeps private sample', async () => {
+    /** @type {Map<string, object>} */
+    const bodies = new Map();
+    const fetchImpl = async (url, init) => {
+      bodies.set(url, JSON.parse(init.body));
+      return { status: 204, text: async () => '' };
+    };
+    const decision = {
+      action: 'update_shape_pr',
+      captureId: '2026-10-26T03-01-16-836Z',
+      decidedAt: '2026-10-26T03:01:16.000Z',
+      capture: {
+        byEndpoint: {
+          'user-self': {
+            hasDrift: true,
+            added: [],
+            removed: ['email'],
+            typeChanged: [],
+            sampleBefore: {
+              id: '5c3014455fb1a5617b77978e',
+              username: 'bmlzootown',
+              displayName: 'Brandon',
+              email: 'hide@me',
+            },
+            sampleAfter: {
+              id: '5c3014455fb1a5617b77978e',
+              username: 'bmlzootown',
+              displayName: 'Brandon',
+            },
+          },
+        },
+      },
+    };
+    const r = await notifyFromDecision({
+      decision,
+      env: {
+        FLUXER_WEBHOOK_URL: 'https://fluxer.example/api/v1/webhooks/1/tok',
+        DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/2/tok',
+      },
+      fetchImpl,
+    });
+    assert.equal(r.notified, true);
+    const fluxerBody = bodies.get('https://fluxer.example/api/v1/webhooks/1/tok');
+    const discordBody = bodies.get('https://discord.com/api/webhooks/2/tok');
+    assert.ok(fluxerBody && discordBody);
+    const fluxerJson = JSON.stringify(fluxerBody);
+    const discordJson = JSON.stringify(discordBody);
+    assert.match(fluxerJson, /bmlzootown/);
+    assert.doesNotMatch(discordJson, /bmlzootown/);
+    assert.doesNotMatch(discordJson, /Brandon/);
+    assert.match(discordJson, /\[redacted\]/);
+    assert.ok(!JSON.stringify(r).includes('/tok'));
   });
 });
