@@ -1,0 +1,1 @@
+import{n as e}from"./aWszMqew.js";import{z as t}from"./index-Dxy9c0et.js";var n=e(),r=t((0,n.jsx)(`path`,{d:`M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8`}),`RadioButtonUnchecked`);export{r as t};

@@ -1,0 +1,1 @@
+import{b as e,m as t}from"./aWszMqew.js";var n=e(t(),1);function r(){let[,e]=n.useState({});return n.useCallback(()=>{e({})},[])}export{r as t};

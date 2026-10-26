@@ -1,0 +1,1 @@
+import{b as e}from"./aWszMqew.js";import{t}from"./CsKSkHHh.js";var n=e(t(),1),r;(function(e){function t(e){return n.default.sanitize(e,{ALLOWED_ATTR:[`href`,`style`,`class`],ALLOWED_TAGS:[`a`,`s`,`u`,`br`,`em`,`span`,`strong`,`p`,`h1`,`h2`,`h3`,`li`,`ol`,`ul`],ALLOW_DATA_ATTR:!1})}e.sanitizeHtml=t})(r||={});export{r as t};

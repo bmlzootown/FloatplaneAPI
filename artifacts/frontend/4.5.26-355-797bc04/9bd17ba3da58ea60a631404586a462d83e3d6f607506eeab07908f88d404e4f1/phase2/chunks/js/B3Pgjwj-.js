@@ -1,0 +1,1 @@
+var e;(function(e){function t(e,t,n){return Math.min(Math.max(e,t),n)}e.clamp=t;function n(e,t){let n=t-e;return Math.floor(Math.random()*n)+e}e.randomInt=n;function r(e,t,n){return t*n+e*(1-n)}e.lerp=r})(e||={});export{e as t};
