@@ -13,7 +13,6 @@ import {
 import {
   buildBeforeAfter,
   formatBeforeAfterField,
-  formatBeforeAfterFields,
   placeholderFor,
   sanitizeSample,
 } from '../../tools/fp-notify/lib/before-after.mjs';
