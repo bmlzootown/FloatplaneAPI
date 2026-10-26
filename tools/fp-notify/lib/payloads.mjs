@@ -1,9 +1,10 @@
 /**
  * Build Discord/Fluxer-compatible webhook payloads from monitor decisions.
  *
- * Human-first copy: titles a person can skim; Action/PR secondary in footer.
- * Shape canary: before → after JSON fragment (capture sample or illustrative).
- * Frontend watch: build/evidence delta only — never invent server API claims.
+ * Human-first copy: plain-language summary + observed API path / build id.
+ * No PR review section; footer is Discord relative/local timestamp only.
+ * Shape: before → after sanitized JSON (or illustrative fallback).
+ * Frontend: build change + brief summary — never invent server API claims.
  */
 
 import {
@@ -17,7 +18,12 @@ import {
   MAX_PATHS_PER_KIND,
 } from './constants.mjs';
 import { formatBeforeAfterFields } from './before-after.mjs';
+import { formatObservedOn } from './endpoints.mjs';
 import { packShapePayloads } from './pack-embeds.mjs';
+import {
+  formatDiscordTimestampFooter,
+  toEmbedTimestampIso,
+} from './time.mjs';
 import { formatPathList, truncDescription, truncField, truncTitle } from './truncate.mjs';
 
 /**
@@ -124,7 +130,12 @@ export function buildShapePayloads(decision, opts = {}) {
   const capture = decision.capture || {};
   const by = mergeEndpointViews(decision, capture);
   const captureId = decision.captureId || capture.captureId || null;
-  const prUrl = opts.prUrl || decision.existingPr?.url || decision.prUrl || null;
+  const eventTime =
+    captureId ||
+    capture.capturedAt ||
+    decision.decidedAt ||
+    decision.ranAt ||
+    null;
 
   const endpointIds = Object.keys(by).sort();
   const drifted = endpointIds.filter((id) => by[id]?.hasDrift);
@@ -132,6 +143,7 @@ export function buildShapePayloads(decision, opts = {}) {
 
   const headline = shapeHeadline(show, by);
   const summary = shapeSummarySentence(show, by);
+  const observed = formatObservedOn(show);
 
   const fields = [];
 
@@ -164,29 +176,16 @@ export function buildShapePayloads(decision, opts = {}) {
     });
   }
 
-  if (prUrl) {
-    fields.push({
-      name: 'Review',
-      value: truncField(`[Open pull request](${prUrl})`),
-      inline: false,
-    });
-  }
-
-  const footerBits = ['API shape canary · read-only'];
-  if (captureId) footerBits.push(`capture ${captureId}`);
-  if (decision.action) footerBits.push(decision.action);
+  const footerText = formatDiscordTimestampFooter(eventTime);
 
   const { payloads } = packShapePayloads({
     title: headline,
-    description: [
-      summary,
-      'Compared against the last committed baseline. Read-only check — no OpenAPI edits.',
-    ].join('\n'),
+    description: [observed, summary].filter(Boolean).join('\n'),
     color: COLOR_SHAPE_DRIFT,
     fields,
-    footer: { text: truncField(footerBits.join(' · ')).slice(0, 2048) },
-    timestamp: decision.decidedAt || decision.ranAt || new Date().toISOString(),
-    url: prUrl,
+    footer: footerText ? { text: truncField(footerText).slice(0, 2048) } : undefined,
+    timestamp: toEmbedTimestampIso(eventTime),
+    url: null,
     username: opts.username || DEFAULT_USERNAME,
   });
 
@@ -272,16 +271,35 @@ export function shapeHeadline(endpointIds, by) {
 }
 
 /**
+ * Short human summary of the structural change (no baseline/disclaimer jargon).
  * @param {string[]} endpointIds
  * @param {Record<string, object>} by
  */
-function shapeSummarySentence(endpointIds, by) {
-  if (!endpointIds.length) return 'Structural change vs the committed field-tree baseline.';
+export function shapeSummarySentence(endpointIds, by) {
+  if (!endpointIds.length) return 'Response shape changed.';
   if (endpointIds.length === 1) {
     const id = endpointIds[0];
     const ep = by[id] || {};
     const removed = asPathArray(ep.removed);
     const added = asPathArray(ep.added);
+    const typed = asTypeChangedArray(ep.typeChanged);
+    const name = humanEndpointName(id);
+    if (removed.length === 1 && !added.length && !typed.length) {
+      return `Removed \`${removed[0]}\` from ${name}.`;
+    }
+    if (added.length === 1 && !removed.length && !typed.length) {
+      return `Added \`${added[0]}\` to ${name}.`;
+    }
+    if (typed.length === 1 && !added.length && !removed.length) {
+      const t = typed[0];
+      const p = typeof t === 'string' ? t : t?.path;
+      const from = typeof t === 'object' ? (Array.isArray(t.from) ? t.from.join('|') : t.from) : null;
+      const to = typeof t === 'object' ? (Array.isArray(t.to) ? t.to.join('|') : t.to) : null;
+      if (p && from != null && to != null) {
+        return `Changed type of \`${p}\` on ${name} (${from} → ${to}).`;
+      }
+      return p ? `Changed type of \`${p}\` on ${name}.` : `Changed a field type on ${name}.`;
+    }
     const bits = [];
     if (removed.length) {
       bits.push(
@@ -297,14 +315,31 @@ function shapeSummarySentence(endpointIds, by) {
           : `added ${added.length} fields (e.g. \`${added[0]}\`)`,
       );
     }
-    const typed = asTypeChangedArray(ep.typeChanged);
     if (typed.length) {
       const p = typeof typed[0] === 'string' ? typed[0] : typed[0]?.path;
       bits.push(p ? `type-changed \`${p}\`` : `type-changed ${typed.length} field(s)`);
     }
-    if (bits.length) return `${humanEndpointName(id)}: ${bits.join('; ')}.`;
+    if (bits.length) return `${capitalize(name)}: ${bits.join('; ')}.`;
   }
-  return `Observed on: ${endpointIds.map(humanEndpointName).join(', ')}.`;
+  const bits = [];
+  for (const id of endpointIds) {
+    const ep = by[id] || {};
+    const removed = asPathArray(ep.removed);
+    const added = asPathArray(ep.added);
+    const typed = asTypeChangedArray(ep.typeChanged);
+    const parts = [];
+    if (removed.length) parts.push(`${removed.length} removed`);
+    if (added.length) parts.push(`${added.length} added`);
+    if (typed.length) parts.push(`${typed.length} type-changed`);
+    if (parts.length) bits.push(`${humanEndpointName(id)} (${parts.join(', ')})`);
+  }
+  return bits.length ? `Changed: ${bits.join('; ')}.` : 'Response shapes changed on multiple endpoints.';
+}
+
+function capitalize(s) {
+  const t = String(s || '');
+  if (!t) return t;
+  return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 /**
@@ -388,84 +423,69 @@ export function buildFrontendPayload(decision, opts = {}) {
     phase1.previousObservation?.buildId ||
     parsePreviousBuild(phase1.comparisonSummary) ||
     null;
-  const prUrl =
-    opts.prUrl ||
-    decision.openMonitorPr?.url ||
-    phase1.openMonitorPr?.url ||
-    decision.prUrl ||
-    null;
 
-  const pending = decision.pendingObservations || phase1.pendingObservations || [];
   const analyses = decision.analyses || phase2.analyses || [];
   const commits =
     decision.commitSequence?.commits ||
     decision.commits ||
     [];
 
-  const title = 'New frontend build observed';
+  const title = previousBuild
+    ? 'Frontend build changed'
+    : 'New frontend build observed';
 
   const descLines = [
     previousBuild
       ? `Build \`${buildId}\` (was \`${previousBuild}\`).`
       : `Build \`${buildId}\`.`,
-    'Frontend evidence only — this is **not** a claim that the server API changed.',
   ];
 
-  const fields = [];
-
-  const evidenceLine = humanizeFrontendEvidence({
+  const summary = humanizeFrontendEvidence({
     analyses,
     commits,
     phase2,
     phase1,
   });
-  if (evidenceLine) {
-    fields.push({
-      name: 'What we saw',
-      value: truncField(evidenceLine),
-      inline: false,
-    });
-  }
+  if (summary) descLines.push(summary);
 
-  if (pending.length > 1) {
-    const ids = pending
-      .slice(-3)
-      .map((o) => o.buildId || o.observationId || '?')
-      .join(', ');
-    fields.push({
-      name: 'Pending observations',
-      value: truncField(`${pending.length} waiting: ${ids}`),
-      inline: false,
-    });
-  }
-
-  if (prUrl) {
-    fields.push({
-      name: 'Review',
-      value: truncField(`[Open pull request](${prUrl})`),
-      inline: false,
-    });
-  }
-
-  const footerBits = ['Frontend watch · evidence only'];
-  if (decision.action) footerBits.push(decision.action);
+  const eventTime =
+    decision.decidedAt ||
+    decision.ranAt ||
+    phase1.observedAt ||
+    phase1.decidedAt ||
+    null;
+  const footerText = formatDiscordTimestampFooter(eventTime);
 
   /** @type {object} */
   const embed = {
     title: truncTitle(title),
     description: truncDescription(descLines.join('\n')),
     color: COLOR_FRONTEND,
-    fields,
-    footer: { text: truncField(footerBits.join(' · ')).slice(0, 2048) },
-    timestamp: decision.decidedAt || decision.ranAt || new Date().toISOString(),
+    fields: [],
+    timestamp: toEmbedTimestampIso(eventTime),
   };
-  if (prUrl) embed.url = prUrl;
+  if (footerText) embed.footer = { text: truncField(footerText).slice(0, 2048) };
 
   return {
     username: opts.username || DEFAULT_USERNAME,
     embeds: [embed],
   };
 }
+
+/** Status strings that are noise in a human alert. */
+const JUNK_STATUS = new Set([
+  'not_applicable',
+  'n/a',
+  'na',
+  'complete',
+  'completed',
+  'ok',
+  'success',
+  'unchanged',
+  'noop',
+  'changed',
+  'pending',
+]);
 
 /**
  * @param {{
@@ -477,27 +497,46 @@ export function buildFrontendPayload(decision, opts = {}) {
  */
 function humanizeFrontendEvidence(input) {
   const { analyses, commits, phase2, phase1 } = input;
-  if (phase2?.headline) return String(phase2.headline);
-  if (phase1?.comparisonSummary) return String(phase1.comparisonSummary);
+  if (phase2?.headline && !isJunkStatus(phase2.headline)) {
+    return String(phase2.headline);
+  }
+  if (phase1?.comparisonSummary && looksLikeUsefulSummary(phase1.comparisonSummary)) {
+    // Prefer not to repeat the build-id line already in the description.
+    const s = String(phase1.comparisonSummary);
+    if (/structured|op\(|provenance|mapper|endpoint|removed|added/i.test(s)) return s;
+  }
 
   const lines = [];
   for (const a of (analyses || []).slice(0, 3)) {
     const counts = a.summary || a.counts;
     const human = compactCountsHuman(counts);
-    if (human) lines.push(human);
-    else if (a.comparisonStatus || a.extractStatus) {
-      lines.push(String(a.comparisonStatus || a.extractStatus));
-    }
+    if (human && !isJunkStatus(human)) lines.push(human);
   }
   if (!lines.length && commits?.length) {
-    lines.push(
-      commits
-        .slice(0, 3)
-        .map((c) => c.message || `${c.phase}/${c.step}`)
-        .join('; '),
-    );
+    const msg = commits
+      .slice(0, 2)
+      .map((c) => c.message)
+      .filter((m) => m && !isJunkStatus(m))
+      .join('; ');
+    if (msg) lines.push(msg);
   }
   return lines.join('\n');
+}
+
+function isJunkStatus(s) {
+  const t = String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+  if (!t) return true;
+  if (JUNK_STATUS.has(t)) return true;
+  // Pure status tokens joined by punctuation/spaces
+  const parts = t.split(/[^a-z0-9]+/).filter(Boolean);
+  return parts.length > 0 && parts.every((p) => JUNK_STATUS.has(p));
+}
+
+function looksLikeUsefulSummary(s) {
+  return !isJunkStatus(s) && String(s).length > 12;
 }
 
 /**

@@ -6,9 +6,10 @@ Small shared notifier for FloatplaneAPI monitors. Posts **only on change**
 
 Fluxer webhooks accept Discord-compatible JSON (`content`, `embeds`, …).
 
-Alerts are written for a human skim in Discord/Fluxer: plain-language title,
-short summary, and (for shape drift) a **before → after** JSON fragment.
-Orchestrator action names / capture IDs stay in the footer, not the headline.
+Alerts are written for a human skim: plain-language title, short summary,
+`Observed on: /api/v3/…` (shape) or build id change (frontend), and (for shape)
+before → after JSON. **No PR review section.** Footer is a Discord relative/local
+timestamp only (`<t:unix:R> · <t:unix:f>`).
 
 ## Configure webhook URL (never commit)
 
@@ -29,8 +30,8 @@ If unset → `skipped: true`, exit 0 (Automation must not fail).
 ## Usage
 
 ```sh
-# After a monitor decision + PR open/update:
-node tools/fp-notify/cli.mjs notify --decision-file /tmp/decision.json --pr-url "$PR_URL"
+# After a monitor decision:
+node tools/fp-notify/cli.mjs notify --decision-file /tmp/decision.json
 
 # Preview payload without POST
 node tools/fp-notify/cli.mjs preview --decision-json '{"action":"open_shape_pr",...}'
@@ -41,9 +42,6 @@ node tools/fp-notify/cli.mjs notify --decision-file d.json --dry-run
 make notify-test
 ```
 
-Orchestrators also accept `--notify` / `--notify-dry-run` / `--pr-url` (optional;
-Automation prompts call this CLI after PR URL is known).
-
 ## Payload shape (sample — shape drift)
 
 ```json
@@ -52,7 +50,7 @@ Automation prompts call this CLI after PR URL is known).
   "embeds": [
     {
       "title": "Floatplane removed a field from content posts",
-      "description": "content posts: removed `creator.discoverable`.\nCompared against the last committed baseline. Read-only check — no OpenAPI edits.",
+      "description": "Observed on: `/api/v3/content/post`\nRemoved `creator.discoverable` from content posts.",
       "color": 15105570,
       "fields": [
         {
@@ -60,36 +58,30 @@ Automation prompts call this CLI after PR URL is known).
           "value": "**Removed**\n− `creator.discoverable`"
         },
         {
-          "name": "Example response fragment",
-          "value": "**Before → after (illustrative; field-trees only — not a live body)**\n**Before**\n```json\n{\n  \"creator\": {\n    \"discoverable\": true\n  }\n}\n```\n**After**\n```json\n{\n  \"creator\": {}\n}\n```"
+          "name": "Before (live sanitized)",
+          "value": "```json\n{ \"creator\": { \"discoverable\": true } }\n```",
+          "inline": true
         },
         {
-          "name": "Review",
-          "value": "[Open pull request](https://github.com/…/pull/13)"
+          "name": "After (live sanitized)",
+          "value": "```json\n{ \"creator\": { \"title\": \"LinusTechTips\" } }\n```",
+          "inline": true
         }
       ],
-      "footer": {
-        "text": "API shape canary · read-only · capture 2026-10-19T03-01-32-094Z · open_shape_pr"
-      },
-      "timestamp": "2026-10-19T03:01:00.000Z"
+      "footer": { "text": "<t:1729911676:R> · <t:1729911676:f>" },
+      "timestamp": "2026-10-26T03:01:16.000Z"
     }
   ]
 }
 ```
 
-Before/after prefers **live sanitized bodies** when the decision includes
-`sampleBefore` / `sampleAfter` (from canary `captures/*/samples/*.sanitized.json`,
-focused around drifted paths). **No silent mid-JSON truncation** — full
-sanitized fragments are posted. If a side exceeds Discord’s ~1024-char field
-cap, it splits into `Before 1/2`, `Before 2/2`, … with an explicit `_continued_`
-marker (or a follow-up webhook message). When both sides fit in one field each,
-they use consecutive `inline: true` fields (**side-by-side**). Otherwise it
-synthesizes a minimal **illustrative** Before|After pair from field paths.
+Before/after prefers **live sanitized bodies** when present. **No silent mid-JSON
+truncation** — oversized samples split into continued fields/messages. Side-by-side
+`inline: true` when both fit one field each.
 
-Frontend alerts summarize the new build id + evidence headline and explicitly
-state they are **not** server API claims. Action names stay in the footer.
+Frontend alerts: build id changed + brief human summary when available. No
+“What we saw” status jargon, pending-observations noise, or PR review links.
 
 ## Limits
 
-Payloads are truncated to Discord/Fluxer limits (~2000 content, ~1024 field
-values, soft ~5500 total JSON).
+Field values ≤1024; embed packing splits rather than ellipsizing sample JSON.
