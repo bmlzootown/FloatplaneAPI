@@ -13,8 +13,14 @@ import { truncate } from './truncate.mjs';
 export const MAX_SNIPPET_PATHS = 6;
 /** Soft cap for illustrative JSON pretty-print inside one embed field */
 export const MAX_SNIPPET_JSON_CHARS = 420;
-/** Larger cap when showing live sanitized capture bodies (still fits Discord field). */
-export const MAX_LIVE_JSON_CHARS = 780;
+/**
+ * Cap for live sanitized JSON in a single side-by-side (inline) field.
+ * Discord still allows 1024 chars/field; keep tighter so Before|After both
+ * read cleanly in one row.
+ */
+export const MAX_LIVE_JSON_CHARS = 480;
+/** Cap for illustrative Before/After when split into inline fields. */
+export const MAX_INLINE_ILLUSTRATIVE_JSON_CHARS = 360;
 
 /**
  * @param {object|null|undefined} ep endpoint drift summary
@@ -128,8 +134,10 @@ export function formatBeforeAfterField(ep) {
 }
 
 /**
- * Embed fields for before/after. Live samples get separate Before/After fields
- * so more of the sanitized body fits under Discord's 1024-char field cap.
+ * Embed fields for before/after.
+ * When both sides exist, emit two consecutive `inline: true` fields so Discord
+ * / Fluxer place Before | After on one row. Values stay ≤ Discord's 1024-char
+ * field cap (trimmed further for readable side-by-side columns).
  * @param {object|null|undefined} ep
  * @returns {{ name: string, value: string, inline: boolean }[]}
  */
@@ -137,25 +145,46 @@ export function formatBeforeAfterFields(ep) {
   const built = buildBeforeAfter(ep);
   if (built.source === 'none') return [];
 
-  if (built.source === 'capture' && (built.before != null || built.after != null)) {
+  const hasBefore = built.before != null;
+  const hasAfter = built.after != null;
+  const sideBySide = hasBefore && hasAfter;
+
+  if (built.source === 'capture' && (hasBefore || hasAfter)) {
     /** @type {{ name: string, value: string, inline: boolean }[]} */
     const fields = [];
     const cap = MAX_LIVE_JSON_CHARS;
-    if (built.before != null) {
+    if (hasBefore) {
       fields.push({
         name: 'Before (live sanitized)',
         value: truncJsonField(built.before, cap),
-        inline: false,
+        inline: sideBySide,
       });
     }
-    if (built.after != null) {
+    if (hasAfter) {
       fields.push({
         name: 'After (live sanitized)',
         value: truncJsonField(built.after, cap),
-        inline: false,
+        inline: sideBySide,
       });
     }
     return fields;
+  }
+
+  // Illustrative: also side-by-side when both halves exist.
+  if (sideBySide) {
+    const cap = MAX_INLINE_ILLUSTRATIVE_JSON_CHARS;
+    return [
+      {
+        name: 'Before (illustrative)',
+        value: truncJsonField(built.before, cap, '_Illustrative — field-trees only_'),
+        inline: true,
+      },
+      {
+        name: 'After (illustrative)',
+        value: truncJsonField(built.after, cap, '_Illustrative — field-trees only_'),
+        inline: true,
+      },
+    ];
   }
 
   return [
@@ -199,9 +228,15 @@ export function formatBeforeAfterMarkdown(opts) {
   return lines.join('\n');
 }
 
-function truncJsonField(value, maxJson) {
-  const body = ['```json', prettyJson(value, maxJson), '```'].join('\n');
-  return truncate(body, MAX_FIELD_VALUE);
+/**
+ * @param {unknown} value
+ * @param {number} maxJson
+ * @param {string} [footnote]
+ */
+function truncJsonField(value, maxJson, footnote = '') {
+  const parts = ['```json', prettyJson(value, maxJson), '```'];
+  if (footnote) parts.push(footnote);
+  return truncate(parts.join('\n'), MAX_FIELD_VALUE);
 }
 
 function emptyResult() {

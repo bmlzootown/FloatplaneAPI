@@ -81,12 +81,14 @@ describe('shape payload human copy + before/after', () => {
     assert.match(ep.value, /creator\.discoverable/);
     assert.match(ep.value, /creator\.newField/);
 
-    const example = embed.fields.find((f) => /Example response fragment/i.test(f.name));
-    assert.ok(example);
-    assert.match(example.value, /illustrative/i);
-    assert.match(example.value, /discoverable/);
-    assert.match(example.value, /Before/i);
-    assert.match(example.value, /After/i);
+    const beforeIll = embed.fields.find((f) => /Before \(illustrative\)/i.test(f.name));
+    const afterIll = embed.fields.find((f) => /After \(illustrative\)/i.test(f.name));
+    assert.ok(beforeIll);
+    assert.ok(afterIll);
+    assert.equal(beforeIll.inline, true);
+    assert.equal(afterIll.inline, true);
+    assert.match(beforeIll.value, /discoverable/);
+    assert.match(afterIll.value, /newField|Illustrative/i);
 
     // Action / capture are secondary (footer), not headline fields.
     assert.ok(!embed.fields.some((f) => f.name === 'Action'));
@@ -134,7 +136,7 @@ describe('shape payload human copy + before/after', () => {
     assert.equal(ba.after.creator.discoverable, undefined);
   });
 
-  it('renders live samples as separate Before/After embed fields', () => {
+  it('renders live samples as side-by-side inline Before/After fields', () => {
     const built = buildNotifyPayload({
       action: 'update_shape_pr',
       captureId: 'c-live',
@@ -167,6 +169,14 @@ describe('shape payload human copy + before/after', () => {
     const after = embed.fields.find((f) => /After \(live sanitized\)/i.test(f.name));
     assert.ok(before);
     assert.ok(after);
+    assert.equal(before.inline, true);
+    assert.equal(after.inline, true);
+    // Consecutive inline fields → Discord/Fluxer one-row layout.
+    const bi = embed.fields.indexOf(before);
+    const ai = embed.fields.indexOf(after);
+    assert.equal(ai, bi + 1);
+    assert.ok(before.value.length <= 1024);
+    assert.ok(after.value.length <= 1024);
     assert.match(before.value, /discoverable/);
     assert.match(after.value, /LinusTechTips/);
     assert.ok(!embed.fields.some((f) => /illustrative/i.test(f.value)));
@@ -306,9 +316,13 @@ describe('resolve + notify', () => {
     assert.equal(posted.webhook.includes('redacted'), true);
     assert.ok(!JSON.stringify(posted).includes('/tok'));
     assert.match(postedBody.embeds[0].title, /removed a field/i);
-    const frag = postedBody.embeds[0].fields.find((f) => /Example response fragment/i.test(f.name));
-    assert.ok(frag);
-    assert.match(frag.value, /discoverable/);
+    const before = postedBody.embeds[0].fields.find((f) => /Before \(illustrative\)/i.test(f.name));
+    const after = postedBody.embeds[0].fields.find((f) => /After \(illustrative\)/i.test(f.name));
+    assert.ok(before);
+    assert.ok(after);
+    assert.equal(before.inline, true);
+    assert.equal(after.inline, true);
+    assert.match(before.value, /discoverable/);
   });
 
   it('dry-run does not call fetch', async () => {
