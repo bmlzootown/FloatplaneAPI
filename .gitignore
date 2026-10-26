@@ -16,14 +16,13 @@
 /tests/frontend-evidence/.tmp-evidence/
 /tests/frontend-evidence-diff/.tmp-diff/
 /tests/frontend-phase2-orchestrate/.tmp-phase2-orch/
-<<<<<<< HEAD
-
-# Phase 3.0 API shape canary secrets (also on canary branch)
-=======
 /tests/api-shape-canary/.tmp-api-shape/
+/tests/api-shape-canary/.tmp-auth-store/
+/tests/fp-notify/.tmp-notify/
 
-# Phase 3.0 API shape canary — never commit tokens or raw bodies
->>>>>>> origin/main
+# Phase 3.x API shape canary — never commit tokens, DPoP keys, or raw bodies
 /state/api-shape-token.local
 /state/api-shape-auth.local.json
+/state/api-shape-*.local*
 /artifacts/api-shape/**/raw/
+/artifacts/api-shape/refresh-evidence.local.json

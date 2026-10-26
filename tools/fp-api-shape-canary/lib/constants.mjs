@@ -7,11 +7,11 @@
  */
 
 export const TOOL_ID = 'fp-api-shape-canary';
-export const TOOL_VERSION = '3.0.0';
+export const TOOL_VERSION = '3.1.0';
 export const SCHEMA_VERSION = 1;
 
 /** Custom User-Agent for read-only probes (identify the watch project). */
-export const USER_AGENT = 'FloatplaneAPI-Watch/3.0 (api-shape-canary; read-only)';
+export const USER_AGENT = 'FloatplaneAPI-Watch/3.1 (api-shape-canary; read-only)';
 
 export const API_BASE_URL = 'https://www.floatplane.com';
 
@@ -28,19 +28,32 @@ export const OIDC = Object.freeze({
   realm: 'floatplane',
   baseUrl: 'https://auth.floatplane.com',
   /**
-   * Minimal scopes for device login. Operators may widen via --scope.
-   * offline_access is optional (refresh); not required for one-shot capture.
+   * One-shot / interactive default. Scheduled canary prefers scheduleScope.
+   * offline_access is advertised in discovery scopes_supported (observed 2026-10-11).
    */
   defaultScope: 'openid',
+  /**
+   * Prefer offline refresh for scheduled runs. Still not "indefinite" — see
+   * docs/phase-3-1-api-shape-schedule.md for measured refresh_expires_in.
+   */
+  scheduleScope: 'openid offline_access',
   grantTypeDeviceCode: 'urn:ietf:params:oauth:grant-type:device_code',
+  grantTypeRefreshToken: 'refresh_token',
 });
+
+/** Separate lane from Phase 1/2 frontend observation branch. */
+export const SHAPE_MONITOR_BRANCH = 'cursor/api-shape-observation';
+export const SHAPE_DEFAULT_BRANCH = 'main';
+export const SHAPE_PR_TITLE_PREFIX = 'API shape canary:';
 
 /** Evidence notes committed beside captures for auditability. */
 export const OIDC_EVIDENCE = Object.freeze({
   clientIdSource:
-    'artifacts/frontend/4.5.22-316-d74397b/.../js/index-BZVDPgzb.js — o_={baseUrl:"https://auth.floatplane.com",realm:"floatplane",clientId:"fp-tv-app",...}',
+    'artifacts/frontend/4.5.22-316-d74397b/.../js/index-BZVDPgzb.js — o_={baseUrl:"https://auth.floatplane.com",realm:"floatplane",clientId:"fp-tv-app",usesExtendedSecurity:!0,...}',
   deviceGrantSource:
     'OIDC discovery grant_types_supported includes urn:ietf:params:oauth:grant-type:device_code; device_authorization_endpoint present (observed 2026-10-02)',
+  refreshGrantSource:
+    'OIDC discovery grant_types_supported includes refresh_token; scopes_supported includes offline_access (observed 2026-10-11). Frontend refreshAccessToken requires DPoP when USE_DPOP; setOAuthTokenFromResponse reads refresh_expires_in as finite wall clock.',
 });
 
 /**
