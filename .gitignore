@@ -25,4 +25,5 @@
 /state/api-shape-auth.local.json
 /state/api-shape-*.local*
 /artifacts/api-shape/**/raw/
+# Sanitized samples (captures/*/samples/*.sanitized.json) may be committed when redacted.
 /artifacts/api-shape/refresh-evidence.local.json

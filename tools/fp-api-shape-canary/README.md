@@ -70,12 +70,16 @@ artifacts/api-shape/
   baselines/{endpointId}.schema.json   # durable field-tree baselines (commit when reviewable)
   captures/{captureId}/
     meta.json                          # calls, notes, oidc evidence refs (no tokens)
-    trees/{endpointId}.schema.json     # observed field trees (no response bodies)
+    trees/{endpointId}.schema.json     # observed field trees (structure only)
+    samples/{endpointId}.sanitized.json # carefully redacted live bodies (Fluxer before/after)
     diff.json
     report.md
 ```
 
-Field trees store **keys + JSON types + nullability only** — not titles, text, or PII.
+Field trees store **keys + JSON types + nullability only** — structural source of truth.
+Sanitized samples retain a redacted live body (no tokens/PII) so Fluxer alerts can show
+**live before/after** instead of illustrative fragments. Prefer **LinusTechTips** when
+the account is subscribed. Never commit `raw/` unredacted dumps.
 
 ## Commands
 

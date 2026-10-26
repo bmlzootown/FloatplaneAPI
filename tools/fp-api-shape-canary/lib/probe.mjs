@@ -2,8 +2,9 @@
  * Read-only allowlisted Floatplane REST probes (DPoP-bound token or unauthenticated).
  */
 
-import { API_BASE_URL, USER_AGENT } from './constants.mjs';
+import { API_BASE_URL, PREFERRED_CREATOR, USER_AGENT } from './constants.mjs';
 import { attachDpopHeaders, readDpopNonce } from './dpop.mjs';
+import { orderCreatorIdsPreferPreferred } from './sanitize-sample.mjs';
 
 /**
  * @param {{
@@ -119,10 +120,13 @@ export function pickCreatorIdFromSubscriptions(body) {
 
 /**
  * Ordered unique creator ids from a subscriptions response.
+ * Prefers LinusTechTips (`PREFERRED_CREATOR.id`) when subscribed so example
+ * content-post / content-creator samples stay on a stable public creator.
  * @param {unknown} body
+ * @param {{ preferPreferred?: boolean }} [opts]
  * @returns {string[]}
  */
-export function listCreatorIdsFromSubscriptions(body) {
+export function listCreatorIdsFromSubscriptions(body, opts = {}) {
   if (!body) return [];
   const list = Array.isArray(body) ? body : body.items || body.subscriptions || null;
   if (!Array.isArray(list) || list.length === 0) return [];
@@ -136,7 +140,8 @@ export function listCreatorIdsFromSubscriptions(body) {
     else id = item.creatorId || item.plan?.creator || item.plan?.creatorId || null;
     if (typeof id === 'string' && id && !ids.includes(id)) ids.push(id);
   }
-  return ids;
+  if (opts.preferPreferred === false) return ids;
+  return orderCreatorIdsPreferPreferred(ids, PREFERRED_CREATOR.id);
 }
 
 /**

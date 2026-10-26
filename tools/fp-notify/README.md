@@ -77,10 +77,11 @@ Automation prompts call this CLI after PR URL is known).
 }
 ```
 
-Before/after prefers a **sanitized capture sample** when the decision includes
-`sampleBefore` / `sampleAfter`. Otherwise it synthesizes a minimal illustrative
-fragment from field paths (captures store field-trees only — never raw bodies).
-Illustrative snippets are labeled as such.
+Before/after prefers **live sanitized bodies** when the decision includes
+`sampleBefore` / `sampleAfter` (from canary `captures/*/samples/*.sanitized.json`,
+focused around drifted paths). Live samples render as separate Before/After embed
+fields under Discord's 1024-char cap. Otherwise it synthesizes a minimal
+**illustrative** fragment from field paths (labeled as such).
 
 Frontend alerts summarize the new build id + evidence headline and explicitly
 state they are **not** server API claims. Action names stay in the footer.

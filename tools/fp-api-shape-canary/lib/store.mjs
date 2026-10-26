@@ -7,8 +7,11 @@
  *   captures/{captureId}/
  *     meta.json
  *     trees/{endpointId}.schema.json
+ *     samples/{endpointId}.sanitized.json   # optional; carefully redacted live bodies
  *     diff.json
  *     report.md
+ *
+ * Never commit raw/ unredacted bodies (gitignored). Samples must be sanitized.
  */
 
 import { mkdir, readFile, writeFile, readdir, access } from 'node:fs/promises';
@@ -105,6 +108,7 @@ export async function writeBaseline(artifactsRoot, endpointId, tree, meta = {}) 
  *   captureId: string,
  *   meta: object,
  *   trees: Record<string, object>,
+ *   samples?: Record<string, unknown>,
  *   diff?: object | null,
  *   reportMd?: string | null,
  *   promoteBaselines?: boolean,
@@ -113,6 +117,7 @@ export async function writeBaseline(artifactsRoot, endpointId, tree, meta = {}) 
 export async function writeCapture(input) {
   const dir = path.join(capturesDir(input.artifactsRoot), input.captureId);
   const treesDir = path.join(dir, 'trees');
+  const samplesDir = path.join(dir, 'samples');
   await mkdir(treesDir, { recursive: true });
 
   await writeFile(path.join(dir, 'meta.json'), `${JSON.stringify(input.meta, null, 2)}\n`, 'utf8');
@@ -139,6 +144,28 @@ export async function writeCapture(input) {
     }
   }
 
+  const samples = input.samples || {};
+  const sampleIds = Object.keys(samples).sort();
+  if (sampleIds.length) {
+    await mkdir(samplesDir, { recursive: true });
+    for (const id of sampleIds) {
+      const doc = {
+        schemaVersion: SCHEMA_VERSION,
+        toolId: TOOL_ID,
+        toolVersion: TOOL_VERSION,
+        endpointId: id,
+        label: 'sanitized-response-sample',
+        captureId: input.captureId,
+        warning:
+          'Sanitized live body for alerts/review — not a raw dump. No tokens/PII. Field-tree remains authoritative for drift.',
+        body: samples[id],
+      };
+      const file = path.join(samplesDir, `${id}.sanitized.json`);
+      await writeFile(file, `${JSON.stringify(doc, null, 2)}\n`, 'utf8');
+      written.push(file);
+    }
+  }
+
   if (input.diff) {
     await writeFile(path.join(dir, 'diff.json'), `${JSON.stringify(input.diff, null, 2)}\n`, 'utf8');
   }
@@ -147,6 +174,49 @@ export async function writeCapture(input) {
   }
 
   return { dir, written };
+}
+
+/**
+ * Load a sanitized sample body for an endpoint from a capture dir.
+ * @param {string} captureDir
+ * @param {string} endpointId
+ * @returns {Promise<unknown|null>}
+ */
+export async function loadCaptureSample(captureDir, endpointId) {
+  const file = path.join(captureDir, 'samples', `${endpointId}.sanitized.json`);
+  try {
+    const raw = await readFile(file, 'utf8');
+    const doc = JSON.parse(raw);
+    return doc.body ?? doc.sample ?? doc;
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+/**
+ * Find the most recent prior capture (by id sort) that has a sample for endpointId.
+ * @param {string} artifactsRoot
+ * @param {string} endpointId
+ * @param {string} [beforeCaptureId] exclusive upper bound
+ * @returns {Promise<{ captureId: string, body: unknown }|null>}
+ */
+export async function findPriorCaptureSample(artifactsRoot, endpointId, beforeCaptureId = null) {
+  const root = capturesDir(artifactsRoot);
+  let entries = [];
+  try {
+    entries = await readdir(root);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
+  const ids = entries.sort().reverse();
+  for (const id of ids) {
+    if (beforeCaptureId && id >= beforeCaptureId) continue;
+    const body = await loadCaptureSample(path.join(root, id), endpointId);
+    if (body != null) return { captureId: id, body };
+  }
+  return null;
 }
 
 /**

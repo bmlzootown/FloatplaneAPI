@@ -1,9 +1,9 @@
 /**
  * Build focused before → after JSON snippets for shape-drift Fluxer alerts.
  *
- * Prefer real sanitized samples when present on the endpoint summary.
- * Otherwise synthesize a minimal illustrative fragment from field paths
- * (captures store field-trees only — never raw bodies).
+ * Prefer real sanitized live samples when present on the endpoint summary
+ * (`sampleBefore` / `sampleAfter` from canary captures). Otherwise synthesize
+ * a minimal illustrative fragment from field paths.
  */
 
 import { MAX_FIELD_VALUE } from './constants.mjs';
@@ -11,8 +11,10 @@ import { truncate } from './truncate.mjs';
 
 /** Max paths to fold into one before/after fragment */
 export const MAX_SNIPPET_PATHS = 6;
-/** Soft cap for JSON pretty-print inside one embed field */
+/** Soft cap for illustrative JSON pretty-print inside one embed field */
 export const MAX_SNIPPET_JSON_CHARS = 420;
+/** Larger cap when showing live sanitized capture bodies (still fits Discord field). */
+export const MAX_LIVE_JSON_CHARS = 780;
 
 /**
  * @param {object|null|undefined} ep endpoint drift summary
@@ -33,15 +35,17 @@ export function buildBeforeAfter(ep) {
     const before = sanitizeSample(ep.sampleBefore);
     const after = sanitizeSample(ep.sampleAfter);
     if (before != null || after != null) {
+      const label = 'Before → after (live sanitized response)';
       return {
         source: 'capture',
-        label: 'Before → after (sanitized capture sample)',
+        label,
         before: before ?? null,
         after: after ?? null,
         markdown: formatBeforeAfterMarkdown({
           before,
           after,
-          label: 'Before → after (sanitized capture sample)',
+          label,
+          maxJsonChars: MAX_LIVE_JSON_CHARS,
         }),
       };
     }
@@ -113,6 +117,8 @@ export function buildBeforeAfter(ep) {
 
 /**
  * Discord embed field value for before/after (truncated to field limit).
+ * Prefer {@link formatBeforeAfterFields} when posting embeds so live samples
+ * can use separate Before/After fields within Discord caps.
  * @param {object|null|undefined} ep
  */
 export function formatBeforeAfterField(ep) {
@@ -122,20 +128,66 @@ export function formatBeforeAfterField(ep) {
 }
 
 /**
- * @param {{ before?: object|null, after?: object|null, label: string }} opts
+ * Embed fields for before/after. Live samples get separate Before/After fields
+ * so more of the sanitized body fits under Discord's 1024-char field cap.
+ * @param {object|null|undefined} ep
+ * @returns {{ name: string, value: string, inline: boolean }[]}
+ */
+export function formatBeforeAfterFields(ep) {
+  const built = buildBeforeAfter(ep);
+  if (built.source === 'none') return [];
+
+  if (built.source === 'capture' && (built.before != null || built.after != null)) {
+    /** @type {{ name: string, value: string, inline: boolean }[]} */
+    const fields = [];
+    const cap = MAX_LIVE_JSON_CHARS;
+    if (built.before != null) {
+      fields.push({
+        name: 'Before (live sanitized)',
+        value: truncJsonField(built.before, cap),
+        inline: false,
+      });
+    }
+    if (built.after != null) {
+      fields.push({
+        name: 'After (live sanitized)',
+        value: truncJsonField(built.after, cap),
+        inline: false,
+      });
+    }
+    return fields;
+  }
+
+  return [
+    {
+      name: 'Example response fragment',
+      value: truncate(built.markdown, MAX_FIELD_VALUE),
+      inline: false,
+    },
+  ];
+}
+
+/**
+ * @param {{
+ *   before?: object|null,
+ *   after?: object|null,
+ *   label: string,
+ *   maxJsonChars?: number,
+ * }} opts
  */
 export function formatBeforeAfterMarkdown(opts) {
+  const maxJson = opts.maxJsonChars ?? MAX_SNIPPET_JSON_CHARS;
   const lines = [`**${opts.label}**`];
   if (opts.before != null) {
     lines.push('**Before**');
     lines.push('```json');
-    lines.push(prettyJson(opts.before));
+    lines.push(prettyJson(opts.before, maxJson));
     lines.push('```');
   }
   if (opts.after != null) {
     lines.push('**After**');
     lines.push('```json');
-    lines.push(prettyJson(opts.after));
+    lines.push(prettyJson(opts.after, maxJson));
     lines.push('```');
   }
   if (opts.before != null && opts.after == null) {
@@ -145,6 +197,11 @@ export function formatBeforeAfterMarkdown(opts) {
     lines.push('_Field(s) newly observed in the response._');
   }
   return lines.join('\n');
+}
+
+function truncJsonField(value, maxJson) {
+  const body = ['```json', prettyJson(value, maxJson), '```'].join('\n');
+  return truncate(body, MAX_FIELD_VALUE);
 }
 
 function emptyResult() {
@@ -157,10 +214,10 @@ function emptyResult() {
   };
 }
 
-function prettyJson(value) {
+function prettyJson(value, maxChars = MAX_SNIPPET_JSON_CHARS) {
   let s = JSON.stringify(value, null, 2);
-  if (s.length > MAX_SNIPPET_JSON_CHARS) {
-    s = `${s.slice(0, MAX_SNIPPET_JSON_CHARS - 1)}…`;
+  if (s.length > maxChars) {
+    s = `${s.slice(0, maxChars - 1)}…`;
   }
   return s;
 }

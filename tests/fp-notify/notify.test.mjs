@@ -13,6 +13,7 @@ import {
 import {
   buildBeforeAfter,
   formatBeforeAfterField,
+  formatBeforeAfterFields,
   placeholderFor,
   sanitizeSample,
 } from '../../tools/fp-notify/lib/before-after.mjs';
@@ -128,10 +129,48 @@ describe('shape payload human copy + before/after', () => {
       sampleAfter: { creator: { id: 'abc' } },
     });
     assert.equal(ba.source, 'capture');
-    assert.match(ba.label, /sanitized capture/i);
+    assert.match(ba.label, /live sanitized/i);
     assert.equal(ba.before.creator.email, '[redacted]');
     assert.equal(ba.before.creator.discoverable, true);
     assert.equal(ba.after.creator.discoverable, undefined);
+  });
+
+  it('renders live samples as separate Before/After embed fields', () => {
+    const built = buildNotifyPayload({
+      action: 'update_shape_pr',
+      captureId: 'c-live',
+      decidedAt: '2026-10-26T03:01:00.000Z',
+      capture: {
+        captureId: 'c-live',
+        byEndpoint: {
+          'content-post': {
+            hasDrift: true,
+            removed: ['creator.discoverable'],
+            added: [],
+            typeChanged: [],
+            sampleBefore: {
+              id: 'post1',
+              title: 'LTT sample',
+              creator: { id: '59f94c0bdd241b70349eb72b', title: 'LinusTechTips', discoverable: true },
+            },
+            sampleAfter: {
+              id: 'post1',
+              title: 'LTT sample',
+              creator: { id: '59f94c0bdd241b70349eb72b', title: 'LinusTechTips' },
+            },
+          },
+        },
+      },
+    }, { prUrl: 'https://github.com/bmlzootown/FloatplaneAPI/pull/13' });
+    assert.equal(built.skipped, false);
+    const embed = built.payload.embeds[0];
+    const before = embed.fields.find((f) => /Before \(live sanitized\)/i.test(f.name));
+    const after = embed.fields.find((f) => /After \(live sanitized\)/i.test(f.name));
+    assert.ok(before);
+    assert.ok(after);
+    assert.match(before.value, /discoverable/);
+    assert.match(after.value, /LinusTechTips/);
+    assert.ok(!embed.fields.some((f) => /illustrative/i.test(f.value)));
   });
 
   it('formatEndpointExample caps path lists; field trunc respects Discord limit', () => {

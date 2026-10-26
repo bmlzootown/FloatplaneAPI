@@ -34,23 +34,35 @@ import {
 import { decideShapeMonitorAction, formatShapePrBody } from './lib/schedule-decision.mjs';
 import { flattenFieldTree } from './lib/field-tree.mjs';
 import { ensureAuthSession, runCapture } from './lib/run.mjs';
-import { loadBaselines } from './lib/store.mjs';
+import {
+  projectDriftFragment,
+  reconstructBeforeFragment,
+} from './lib/sanitize-sample.mjs';
+import { findPriorCaptureSample, loadBaselines, loadCaptureSample } from './lib/store.mjs';
 import { notifyFromDecision } from '../fp-notify/lib/notify.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const ORCHESTRATOR_ID = 'fp-api-shape-schedule';
-const ORCHESTRATOR_VERSION = '3.1.2';
+const ORCHESTRATOR_VERSION = '3.2.0';
 /** Cap path samples embedded in decision JSON for Fluxer alerts / PR bodies. */
 const PATH_SAMPLE_CAP = 12;
 
 /**
- * Counts + capped path samples for alerts (no response bodies).
- * Optional typeHints help Fluxer synthesize illustrative before/after JSON.
+ * Counts + capped path samples for alerts, plus optional live sanitized
+ * before/after body fragments when capture samples exist.
+ * Optional typeHints help Fluxer synthesize illustrative before/after JSON
+ * when live samples are missing.
  * @param {object} d
- * @param {{ baselineTree?: object, currentTree?: object }} [trees]
+ * @param {{
+ *   baselineTree?: object,
+ *   currentTree?: object,
+ *   sampleAfter?: unknown,
+ *   sampleBefore?: unknown,
+ *   sampleSource?: string,
+ * }} [extra]
  */
-function summarizeEndpointDiff(d, trees = {}) {
+function summarizeEndpointDiff(d, extra = {}) {
   const added = d.added || [];
   const removed = d.removed || [];
   const typeChanged = d.typeChanged || [];
@@ -58,24 +70,57 @@ function summarizeEndpointDiff(d, trees = {}) {
     added: added.slice(0, PATH_SAMPLE_CAP),
     removed: removed.slice(0, PATH_SAMPLE_CAP),
     typeChanged: typeChanged.slice(0, PATH_SAMPLE_CAP),
-    baselineTree: trees.baselineTree,
-    currentTree: trees.currentTree,
+    baselineTree: extra.baselineTree,
+    currentTree: extra.currentTree,
   });
+  const driftSlice = {
+    added: added.slice(0, PATH_SAMPLE_CAP),
+    removed: removed.slice(0, PATH_SAMPLE_CAP),
+    typeChanged: typeChanged.slice(0, PATH_SAMPLE_CAP),
+    typeHints,
+  };
+
+  /** @type {unknown} */
+  let sampleAfter = null;
+  /** @type {unknown} */
+  let sampleBefore = null;
+  /** @type {string|undefined} */
+  let sampleSource;
+
+  if (extra.sampleAfter != null || extra.sampleBefore != null) {
+    sampleAfter =
+      extra.sampleAfter != null
+        ? projectDriftFragment(extra.sampleAfter, driftSlice)
+        : null;
+    if (extra.sampleBefore != null) {
+      sampleBefore = projectDriftFragment(extra.sampleBefore, driftSlice);
+      sampleSource = extra.sampleSource || 'prior-capture-sample';
+    } else if (d.hasDrift && extra.sampleAfter != null) {
+      sampleBefore = reconstructBeforeFragment(extra.sampleAfter, driftSlice);
+      sampleSource = 'reconstructed-from-after+drift';
+    } else {
+      sampleSource = extra.sampleSource;
+    }
+  }
+
   return {
     hasDrift: Boolean(d.hasDrift),
     addedCount: added.length,
     removedCount: removed.length,
     typeChangedCount: typeChanged.length,
     // Keep array fields for notifier examples; also expose counts for older readers.
-    added: added.slice(0, PATH_SAMPLE_CAP),
-    removed: removed.slice(0, PATH_SAMPLE_CAP),
-    typeChanged: typeChanged.slice(0, PATH_SAMPLE_CAP),
+    added: driftSlice.added,
+    removed: driftSlice.removed,
+    typeChanged: driftSlice.typeChanged,
     truncated:
       added.length > PATH_SAMPLE_CAP ||
       removed.length > PATH_SAMPLE_CAP ||
       typeChanged.length > PATH_SAMPLE_CAP,
     note: d.note || undefined,
     ...(Object.keys(typeHints).length ? { typeHints } : {}),
+    ...(sampleBefore != null ? { sampleBefore } : {}),
+    ...(sampleAfter != null ? { sampleAfter } : {}),
+    ...(sampleSource ? { sampleSource } : {}),
   };
 }
 
@@ -171,9 +216,10 @@ async function main(argv) {
   });
 
   const baselines = await loadBaselines(artifactsRoot).catch(() => ({}));
+  const samplePairs = await resolveSamplePairs(artifactsRoot, capture);
   const decision = decideShapeMonitorAction({
     auth,
-    capture: summarizeCapture(capture, baselines),
+    capture: summarizeCapture(capture, baselines, samplePairs),
     openShapePrs: args.openPrsJson || [],
     nowIso: new Date().toISOString(),
   });
@@ -189,13 +235,15 @@ async function main(argv) {
 /**
  * @param {object} capture
  * @param {Record<string, object>} [baselines]
+ * @param {Record<string, { before?: unknown, after?: unknown, source?: string }>} [samplePairs]
  */
-function summarizeCapture(capture, baselines = {}) {
+function summarizeCapture(capture, baselines = {}, samplePairs = {}) {
   return {
     exitCode: capture.exitCode,
     captureId: capture.captureId,
     dir: capture.dir,
     endpointIds: Object.keys(capture.trees || {}),
+    sampleEndpointIds: Object.keys(capture.samples || {}),
     notes: capture.notes || [],
     errors: capture.errors || [],
     hasDrift: Boolean(capture.diff?.hasDrift),
@@ -207,6 +255,9 @@ function summarizeCapture(capture, baselines = {}) {
             summarizeEndpointDiff(d, {
               baselineTree: baselines[id],
               currentTree: capture.trees?.[id],
+              sampleAfter: samplePairs[id]?.after ?? capture.samples?.[id],
+              sampleBefore: samplePairs[id]?.before,
+              sampleSource: samplePairs[id]?.source,
             }),
           ]),
         )
@@ -218,6 +269,46 @@ function summarizeCapture(capture, baselines = {}) {
       auth: c.auth,
     })),
   };
+}
+
+/**
+ * Resolve prior sanitized samples for drifted endpoints (for before bodies).
+ * @param {string} artifactsRoot
+ * @param {object} capture
+ */
+async function resolveSamplePairs(artifactsRoot, capture) {
+  /** @type {Record<string, { before?: unknown, after?: unknown, source?: string }>} */
+  const pairs = {};
+  const afterBodies = { ...(capture.samples || {}) };
+  // Prefer in-memory samples; fall back to files just written.
+  if (capture.dir) {
+    for (const id of Object.keys(capture.trees || {})) {
+      if (afterBodies[id] != null) continue;
+      const body = await loadCaptureSample(capture.dir, id);
+      if (body != null) afterBodies[id] = body;
+    }
+  }
+  for (const [id, body] of Object.entries(afterBodies)) {
+    pairs[id] = { after: body };
+  }
+  const drifted = Object.entries(capture.diff?.byEndpoint || {})
+    .filter(([, d]) => d?.hasDrift)
+    .map(([id]) => id);
+  for (const id of drifted) {
+    const prior = await findPriorCaptureSample(
+      artifactsRoot,
+      id,
+      capture.captureId || null,
+    );
+    if (prior?.body != null) {
+      pairs[id] = {
+        ...(pairs[id] || {}),
+        before: prior.body,
+        source: `prior-capture:${prior.captureId}`,
+      };
+    }
+  }
+  return pairs;
 }
 
 async function maybeNotify(decision, args) {
@@ -256,6 +347,7 @@ function attachPrArtifacts(decision, capture = null) {
     base: SHAPE_DEFAULT_BRANCH,
     paths: [
       capture?.dir,
+      capture?.dir ? `${capture.dir}/samples/` : null,
       'artifacts/api-shape/baselines/',
     ].filter(Boolean),
     commitMessage: decision.commitMessage,

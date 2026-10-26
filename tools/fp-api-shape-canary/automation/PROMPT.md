@@ -10,7 +10,10 @@ Repository: `bmlzootown/FloatplaneAPI`. Start from `main`, but refresh SCM every
 - **Read-only allowlist only** via `tools/fp-api-shape-canary` (user/self, subscriptions,
   content/creator, content/post; optional content/video). No writes. No `/delivery/info`.
 - Prefer **refresh-token + DPoP** from gitignored `state/api-shape-auth.local.json`.
-  Never commit tokens, DPoP private keys, or raw response bodies.
+  Never commit tokens, DPoP private keys, or **raw** (unredacted) response bodies.
+  Sanitized samples under `captures/*/samples/*.sanitized.json` are OK to commit with
+  the capture when carefully redacted (no tokens/PII). Prefer **LinusTechTips**
+  (`59f94c0bdd241b70349eb72b`) for content-post / content-creator examples when subscribed.
 - Do **not** edit OpenAPI/AsyncAPI. Do **not** touch Hydravion.
 - Do **not** change Phase 1/2 frontend watch behavior or `tools/fp-frontend-watch/automation/PROMPT.md`.
 - Do **not** auto-merge PRs.
@@ -78,13 +81,16 @@ No baseline-mutation PR. Report and stop.
 Structural drift vs committed `artifacts/api-shape/baselines/`.
 
 1. Checkout/create branch `cursor/api-shape-observation` (merge `origin/main` first if branch exists).
-2. Commit capture artifacts indicated by the decision (`gitHints.paths` / capture dir).
-   Do **not** commit `state/api-shape-*.local*`.
+2. Commit capture artifacts indicated by the decision (`gitHints.paths` / capture dir),
+   including **`samples/*.sanitized.json`** when present (sanitized live bodies for alerts).
+   Do **not** commit `state/api-shape-*.local*` or `artifacts/api-shape/**/raw/`.
 3. Open or update **one** draft PR into `main` with `prTitle` / `prBody`.
 4. Fast-forward push only. Never force-push.
 5. **Fluxer notify (change only):** after the PR URL is known, post a short **human-readable**
-   webhook alert (plain-language title + before/after response fragment when paths are known;
-   skipped quietly if the webhook secret is unset):
+   webhook alert. Prefer **live sanitized before/after bodies** from the decision
+   (`capture.byEndpoint.*.sampleBefore` / `sampleAfter`); fall back to illustrative
+   field-tree fragments only when samples are missing. Cap Discord embed sizes.
+   Skipped quietly if the webhook secret is unset:
    ```sh
    node tools/fp-notify/cli.mjs notify --decision-file /tmp/shape-decision.json --pr-url "$PR_URL"
    ```

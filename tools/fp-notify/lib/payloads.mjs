@@ -16,7 +16,7 @@ import {
   MAX_ENDPOINTS_IN_EMBED,
   MAX_PATHS_PER_KIND,
 } from './constants.mjs';
-import { formatBeforeAfterField } from './before-after.mjs';
+import { formatBeforeAfterFields } from './before-after.mjs';
 import { formatPathList, truncDescription, truncField, truncTitle } from './truncate.mjs';
 
 /**
@@ -130,12 +130,11 @@ export function buildShapePayload(decision, opts = {}) {
       inline: false,
     });
 
-    const ba = formatBeforeAfterField(ep);
-    if (ba) {
+    for (const f of formatBeforeAfterFields(ep)) {
       fields.push({
-        name: truncTitle('Example response fragment'),
-        value: truncField(ba),
-        inline: false,
+        name: truncTitle(f.name),
+        value: truncField(f.value),
+        inline: Boolean(f.inline),
       });
     }
   }
