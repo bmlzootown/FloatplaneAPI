@@ -17,6 +17,7 @@ import {
   MAX_PATHS_PER_KIND,
 } from './constants.mjs';
 import { formatBeforeAfterFields } from './before-after.mjs';
+import { packShapePayloads } from './pack-embeds.mjs';
 import { formatPathList, truncDescription, truncField, truncTitle } from './truncate.mjs';
 
 /**
@@ -60,7 +61,15 @@ export function detectLane(decision) {
  *   notifyOnAuth?: boolean,
  *   username?: string,
  * }} [opts]
- * @returns {{ skipped: true, reason: string } | { skipped: false, payload: object, lane: string }}
+ * @returns {{
+ *   skipped: true,
+ *   reason: string,
+ * } | {
+ *   skipped: false,
+ *   payload: object,
+ *   payloads?: object[],
+ *   lane: string,
+ * }}
  */
 export function buildNotifyPayload(decision, opts = {}) {
   if (!shouldNotify(decision, opts)) {
@@ -69,10 +78,12 @@ export function buildNotifyPayload(decision, opts = {}) {
 
   const lane = detectLane(decision);
   if (lane === 'shape') {
+    const payloads = buildShapePayloads(decision, opts);
     return {
       skipped: false,
       lane,
-      payload: buildShapePayload(decision, opts),
+      payload: payloads[0],
+      payloads,
     };
   }
   if (lane === 'frontend') {
@@ -103,10 +114,13 @@ export function buildNotifyPayload(decision, opts = {}) {
 }
 
 /**
+ * Build one or more webhook payloads for shape drift (full sanitized JSON;
+ * split across fields/embeds/messages instead of silent truncation).
  * @param {object} decision
  * @param {{ prUrl?: string|null, username?: string }} opts
+ * @returns {object[]}
  */
-export function buildShapePayload(decision, opts = {}) {
+export function buildShapePayloads(decision, opts = {}) {
   const capture = decision.capture || {};
   const by = mergeEndpointViews(decision, capture);
   const captureId = decision.captureId || capture.captureId || null;
@@ -131,9 +145,11 @@ export function buildShapePayload(decision, opts = {}) {
     });
 
     for (const f of formatBeforeAfterFields(ep)) {
+      // Values are already Discord-capped via explicit chunking — do not truncField
+      // (that would silently ellipsize mid-JSON).
       fields.push({
         name: truncTitle(f.name),
-        value: truncField(f.value),
+        value: f.value,
         inline: Boolean(f.inline),
       });
     }
@@ -160,26 +176,29 @@ export function buildShapePayload(decision, opts = {}) {
   if (captureId) footerBits.push(`capture ${captureId}`);
   if (decision.action) footerBits.push(decision.action);
 
-  /** @type {object} */
-  const embed = {
-    title: truncTitle(headline),
-    description: truncDescription(
-      [
-        summary,
-        'Compared against the last committed baseline. Read-only check — no OpenAPI edits.',
-      ].join('\n'),
-    ),
+  const { payloads } = packShapePayloads({
+    title: headline,
+    description: [
+      summary,
+      'Compared against the last committed baseline. Read-only check — no OpenAPI edits.',
+    ].join('\n'),
     color: COLOR_SHAPE_DRIFT,
     fields,
     footer: { text: truncField(footerBits.join(' · ')).slice(0, 2048) },
     timestamp: decision.decidedAt || decision.ranAt || new Date().toISOString(),
-  };
-  if (prUrl) embed.url = prUrl;
-
-  return {
+    url: prUrl,
     username: opts.username || DEFAULT_USERNAME,
-    embeds: [embed],
-  };
+  });
+
+  return payloads;
+}
+
+/**
+ * @param {object} decision
+ * @param {{ prUrl?: string|null, username?: string }} opts
+ */
+export function buildShapePayload(decision, opts = {}) {
+  return buildShapePayloads(decision, opts)[0];
 }
 
 /**

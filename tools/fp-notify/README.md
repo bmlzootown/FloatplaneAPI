@@ -79,10 +79,12 @@ Automation prompts call this CLI after PR URL is known).
 
 Before/after prefers **live sanitized bodies** when the decision includes
 `sampleBefore` / `sampleAfter` (from canary `captures/*/samples/*.sanitized.json`,
-focused around drifted paths). Before and After render as two consecutive
-`inline: true` embed fields (Discord/Fluxer places them **side-by-side**), each
-trimmed under the 1024-char field cap. Otherwise it synthesizes a minimal
-**illustrative** Before|After pair (also inline) from field paths.
+focused around drifted paths). **No silent mid-JSON truncation** — full
+sanitized fragments are posted. If a side exceeds Discord’s ~1024-char field
+cap, it splits into `Before 1/2`, `Before 2/2`, … with an explicit `_continued_`
+marker (or a follow-up webhook message). When both sides fit in one field each,
+they use consecutive `inline: true` fields (**side-by-side**). Otherwise it
+synthesizes a minimal **illustrative** Before|After pair from field paths.
 
 Frontend alerts summarize the new build id + evidence headline and explicitly
 state they are **not** server API claims. Action names stay in the footer.

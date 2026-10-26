@@ -11,11 +11,20 @@ export const MAX_EMBED_DESCRIPTION = 4096;
 export const MAX_FIELD_VALUE = 1024;
 /** Embed title max */
 export const MAX_EMBED_TITLE = 256;
-/** Soft cap for total JSON payload body we send */
-export const MAX_PAYLOAD_CHARS = 5500;
+/**
+ * Soft cap per webhook POST body. Discord embed content is also bounded
+ * (~6000 chars / embed); we pack/split rather than silently truncating JSON.
+ */
+export const MAX_PAYLOAD_CHARS = 18000;
+/** Discord hard-ish total characters across one embed's text parts */
+export const MAX_EMBED_TOTAL_CHARS = 6000;
+/** Discord max fields per embed */
+export const MAX_EMBED_FIELDS = 25;
+/** Discord max embeds per message */
+export const MAX_EMBEDS_PER_MESSAGE = 10;
 
 export const TOOL_ID = 'fp-notify';
-export const TOOL_VERSION = '1.2.0';
+export const TOOL_VERSION = '1.3.0';
 
 export const DEFAULT_USERNAME = 'FloatplaneAPI Watch';
 

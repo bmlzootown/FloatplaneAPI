@@ -8,8 +8,11 @@
  * evidence for human-readable before/after alerts.
  */
 
-/** Max string length kept in a sanitized sample (paths/URLs truncated). */
-export const MAX_SAMPLE_STRING = 120;
+/**
+ * Max string length kept in a durable sanitized sample.
+ * Keep ids/paths/titles intact; only clamp very long text bodies.
+ */
+export const MAX_SAMPLE_STRING = 4000;
 /** Max array items retained at any level. */
 export const MAX_SAMPLE_ARRAY = 4;
 /** Soft JSON size for a full endpoint sample file. */
@@ -230,7 +233,10 @@ function redactValue(value, path) {
   if (typeof value === 'string') {
     if (looksLikeToken(value)) return '[redacted]';
     if (looksLikeEmail(value)) return '[redacted-email]';
-    if (value.length > MAX_SAMPLE_STRING) return `${value.slice(0, MAX_SAMPLE_STRING - 1)}…`;
+    // Explicit clamp only for very long prose — never mid-cut short ids/paths.
+    if (value.length > MAX_SAMPLE_STRING) {
+      return `${value.slice(0, MAX_SAMPLE_STRING)}[truncated]`;
+    }
     return value;
   }
   if (typeof value === 'number' || typeof value === 'boolean') return value;
@@ -377,14 +383,14 @@ function cloneShallow(v) {
         return peekObject(x, MAX_FRAGMENT_SIBLINGS);
       }
       if (typeof x === 'string' && x.length > MAX_SAMPLE_STRING) {
-        return `${x.slice(0, MAX_SAMPLE_STRING - 1)}…`;
+        return `${x.slice(0, MAX_SAMPLE_STRING)}[truncated]`;
       }
       return x;
     });
   }
   if (typeof v === 'object') return peekObject(v, MAX_FRAGMENT_SIBLINGS);
   if (typeof v === 'string' && v.length > MAX_SAMPLE_STRING) {
-    return `${v.slice(0, MAX_SAMPLE_STRING - 1)}…`;
+    return `${v.slice(0, MAX_SAMPLE_STRING)}[truncated]`;
   }
   return v;
 }

@@ -13,8 +13,10 @@ import {
 import {
   buildBeforeAfter,
   formatBeforeAfterField,
+  jsonValueToFields,
   placeholderFor,
   sanitizeSample,
+  splitTextPreserveLines,
 } from '../../tools/fp-notify/lib/before-after.mjs';
 import { notifyFromDecision } from '../../tools/fp-notify/lib/notify.mjs';
 import { resolveWebhookUrl, redactWebhookUrl } from '../../tools/fp-notify/lib/resolve-webhook.mjs';
@@ -165,8 +167,8 @@ describe('shape payload human copy + before/after', () => {
     }, { prUrl: 'https://github.com/bmlzootown/FloatplaneAPI/pull/13' });
     assert.equal(built.skipped, false);
     const embed = built.payload.embeds[0];
-    const before = embed.fields.find((f) => /Before \(live sanitized\)/i.test(f.name));
-    const after = embed.fields.find((f) => /After \(live sanitized\)/i.test(f.name));
+    const before = embed.fields.find((f) => /^Before \(live sanitized\)$/i.test(f.name));
+    const after = embed.fields.find((f) => /^After \(live sanitized\)$/i.test(f.name));
     assert.ok(before);
     assert.ok(after);
     assert.equal(before.inline, true);
@@ -179,7 +181,57 @@ describe('shape payload human copy + before/after', () => {
     assert.ok(after.value.length <= 1024);
     assert.match(before.value, /discoverable/);
     assert.match(after.value, /LinusTechTips/);
+    // Full ids — no silent mid-JSON ellipsis.
+    assert.match(before.value, /59f94c0bdd241b70349eb72b/);
+    assert.doesNotMatch(before.value, /…/);
     assert.ok(!embed.fields.some((f) => /illustrative/i.test(f.value)));
+  });
+
+  it('splits oversized JSON into continued fields without mid-JSON ellipsis', () => {
+    /** @type {Record<string, string>} */
+    const big = { id: '59f94c0bdd241b70349eb72b', owner: '59f94c0bdd241b70349eb72b' };
+    for (let i = 0; i < 40; i++) {
+      big[`field${i}`] = `value-${i}-abcdefghijklmnopqrstuvwxyz`;
+    }
+    const fields = jsonValueToFields(big, 'Before (live sanitized)');
+    assert.ok(fields.length >= 2);
+    assert.match(fields[0].name, /1\/\d+/);
+    assert.match(fields[0].value, /_continued_/);
+    const joined = fields.map((f) => f.value).join('\n');
+    assert.doesNotMatch(joined.replace(/```json|```|_continued_/g, ''), /…/);
+    // Reconstruct: strip fences and continued markers; should parse as complete JSON when joined properly.
+    const jsonParts = fields.map((f) =>
+      f.value
+        .replace(/^```json\n/, '')
+        .replace(/\n```[\s\S]*$/, ''),
+    );
+    const reconstructed = jsonParts.join('\n');
+    const parsed = JSON.parse(reconstructed);
+    assert.equal(parsed.id, '59f94c0bdd241b70349eb72b');
+    assert.equal(parsed.owner, '59f94c0bdd241b70349eb72b');
+    assert.equal(parsed.field39, 'value-39-abcdefghijklmnopqrstuvwxyz');
+    for (const f of fields) assert.ok(f.value.length <= 1024);
+  });
+
+  it('splitTextPreserveLines never inserts ellipsis', () => {
+    const text = Array.from({ length: 30 }, (_, i) => `  "k${i}": "v${i}",`).join('\n');
+    const parts = splitTextPreserveLines(text, 100);
+    assert.ok(parts.length > 1);
+    assert.equal(parts.join('\n'), text);
+    assert.ok(parts.every((p) => !p.includes('…')));
+  });
+
+  it('sanitizeSample keeps long non-secret strings intact', () => {
+    const id = '59f94c0bdd241b70349eb72b';
+    const title = `Hello world ${'abc '.repeat(40)}`;
+    const s = sanitizeSample({
+      owner: id,
+      title,
+      email: 'a@b.c',
+    });
+    assert.equal(s.owner, id);
+    assert.equal(s.title, title);
+    assert.equal(s.email, '[redacted]');
   });
 
   it('formatEndpointExample caps path lists; field trunc respects Discord limit', () => {

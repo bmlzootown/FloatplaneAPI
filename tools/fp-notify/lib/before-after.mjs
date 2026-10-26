@@ -4,23 +4,21 @@
  * Prefer real sanitized live samples when present on the endpoint summary
  * (`sampleBefore` / `sampleAfter` from canary captures). Otherwise synthesize
  * a minimal illustrative fragment from field paths.
+ *
+ * Never silently ellipsize mid-JSON. If a body exceeds one Discord field
+ * (~1024), split into sequential fields with explicit "continued" labels.
  */
 
-import { MAX_FIELD_VALUE } from './constants.mjs';
+import { MAX_FIELD_VALUE, MAX_EMBED_TITLE } from './constants.mjs';
 import { truncate } from './truncate.mjs';
 
 /** Max paths to fold into one before/after fragment */
 export const MAX_SNIPPET_PATHS = 6;
-/** Soft cap for illustrative JSON pretty-print inside one embed field */
-export const MAX_SNIPPET_JSON_CHARS = 420;
-/**
- * Cap for live sanitized JSON in a single side-by-side (inline) field.
- * Discord still allows 1024 chars/field; keep tighter so Before|After both
- * read cleanly in one row.
- */
-export const MAX_LIVE_JSON_CHARS = 480;
-/** Cap for illustrative Before/After when split into inline fields. */
-export const MAX_INLINE_ILLUSTRATIVE_JSON_CHARS = 360;
+
+/** Overhead for ```json fences around a chunk */
+const JSON_FENCE_OVERHEAD = '```json\n'.length + '\n```'.length;
+/** Reserve for an optional footnote line under the fence */
+const FOOTNOTE_RESERVE = 48;
 
 /**
  * @param {object|null|undefined} ep endpoint drift summary
@@ -47,12 +45,7 @@ export function buildBeforeAfter(ep) {
         label,
         before: before ?? null,
         after: after ?? null,
-        markdown: formatBeforeAfterMarkdown({
-          before,
-          after,
-          label,
-          maxJsonChars: MAX_LIVE_JSON_CHARS,
-        }),
+        markdown: formatBeforeAfterMarkdown({ before, after, label }),
       };
     }
   }
@@ -100,7 +93,6 @@ export function buildBeforeAfter(ep) {
     pathCount += 1;
   }
 
-  // Keep parent object present on the side that lost keys so the nest is visible.
   ensureParents(before, [...removed, ...typeChanged.map((t) => (typeof t === 'string' ? t : t?.path)).filter(Boolean)]);
   ensureParents(after, [...added, ...removed, ...typeChanged.map((t) => (typeof t === 'string' ? t : t?.path)).filter(Boolean)]);
 
@@ -122,22 +114,24 @@ export function buildBeforeAfter(ep) {
 }
 
 /**
- * Discord embed field value for before/after (truncated to field limit).
- * Prefer {@link formatBeforeAfterFields} when posting embeds so live samples
- * can use separate Before/After fields within Discord caps.
+ * Legacy single-field formatter (may still truncate markdown for tiny previews).
+ * Prefer {@link formatBeforeAfterFields}.
  * @param {object|null|undefined} ep
  */
 export function formatBeforeAfterField(ep) {
-  const built = buildBeforeAfter(ep);
-  if (built.source === 'none') return '';
-  return truncate(built.markdown, MAX_FIELD_VALUE);
+  const fields = formatBeforeAfterFields(ep);
+  if (!fields.length) return '';
+  return fields.map((f) => `**${f.name}**\n${f.value}`).join('\n');
 }
 
 /**
  * Embed fields for before/after.
- * When both sides exist, emit two consecutive `inline: true` fields so Discord
- * / Fluxer place Before | After on one row. Values stay ≤ Discord's 1024-char
- * field cap (trimmed further for readable side-by-side columns).
+ *
+ * - Full sanitized JSON is preserved (no mid-JSON `…`).
+ * - If both sides fit in one field each → consecutive `inline: true` (side-by-side).
+ * - If either side needs multiple chunks → full-width sequential fields
+ *   named `Before (live sanitized) 1/2`, `… 2/2`, with `_continued_` notes.
+ *
  * @param {object|null|undefined} ep
  * @returns {{ name: string, value: string, inline: boolean }[]}
  */
@@ -145,55 +139,124 @@ export function formatBeforeAfterFields(ep) {
   const built = buildBeforeAfter(ep);
   if (built.source === 'none') return [];
 
-  const hasBefore = built.before != null;
-  const hasAfter = built.after != null;
-  const sideBySide = hasBefore && hasAfter;
+  const live = built.source === 'capture';
+  const beforeLabel = live ? 'Before (live sanitized)' : 'Before (illustrative)';
+  const afterLabel = live ? 'After (live sanitized)' : 'After (illustrative)';
+  const footnote = live ? '' : '_Illustrative — field-trees only_';
 
-  if (built.source === 'capture' && (hasBefore || hasAfter)) {
-    /** @type {{ name: string, value: string, inline: boolean }[]} */
-    const fields = [];
-    const cap = MAX_LIVE_JSON_CHARS;
-    if (hasBefore) {
-      fields.push({
-        name: 'Before (live sanitized)',
-        value: truncJsonField(built.before, cap),
-        inline: sideBySide,
-      });
-    }
-    if (hasAfter) {
-      fields.push({
-        name: 'After (live sanitized)',
-        value: truncJsonField(built.after, cap),
-        inline: sideBySide,
-      });
-    }
-    return fields;
-  }
+  const beforeFields = built.before != null
+    ? jsonValueToFields(built.before, beforeLabel, footnote)
+    : [];
+  const afterFields = built.after != null
+    ? jsonValueToFields(built.after, afterLabel, footnote)
+    : [];
 
-  // Illustrative: also side-by-side when both halves exist.
+  const sideBySide =
+    beforeFields.length === 1 &&
+    afterFields.length === 1;
+
   if (sideBySide) {
-    const cap = MAX_INLINE_ILLUSTRATIVE_JSON_CHARS;
     return [
-      {
-        name: 'Before (illustrative)',
-        value: truncJsonField(built.before, cap, '_Illustrative — field-trees only_'),
-        inline: true,
-      },
-      {
-        name: 'After (illustrative)',
-        value: truncJsonField(built.after, cap, '_Illustrative — field-trees only_'),
-        inline: true,
-      },
+      { ...beforeFields[0], inline: true },
+      { ...afterFields[0], inline: true },
     ];
   }
 
+  // Multi-chunk: keep full-width so continued parts stay readable.
   return [
-    {
-      name: 'Example response fragment',
-      value: truncate(built.markdown, MAX_FIELD_VALUE),
-      inline: false,
-    },
+    ...beforeFields.map((f) => ({ ...f, inline: false })),
+    ...afterFields.map((f) => ({ ...f, inline: false })),
   ];
+}
+
+/**
+ * Split a JSON value into one or more embed fields without silent truncation.
+ * @param {unknown} value
+ * @param {string} baseName
+ * @param {string} [footnote]
+ * @returns {{ name: string, value: string, inline: boolean }[]}
+ */
+export function jsonValueToFields(value, baseName, footnote = '') {
+  const jsonText = JSON.stringify(value, null, 2);
+  const footnoteLen = footnote ? footnote.length + 1 : 0;
+  const maxInner = MAX_FIELD_VALUE - JSON_FENCE_OVERHEAD - Math.max(footnoteLen, FOOTNOTE_RESERVE);
+  const chunks = splitTextPreserveLines(jsonText, Math.max(64, maxInner));
+  const total = chunks.length;
+
+  return chunks.map((chunk, i) => {
+    const name =
+      total === 1
+        ? baseName
+        : `${baseName} ${i + 1}/${total}`;
+    const parts = ['```json', chunk, '```'];
+    if (total > 1 && i < total - 1) {
+      parts.push('_continued_');
+    } else if (footnote) {
+      parts.push(footnote);
+    }
+    const valueStr = parts.join('\n');
+    // Hard Discord cap: never exceed; splitTextPreserveLines should prevent this.
+    if (valueStr.length > MAX_FIELD_VALUE) {
+      // Last resort: drop footnote/continued and keep fences + as much JSON as fits,
+      // but still mark continued explicitly if we had to cut (should be rare).
+      const hard = ['```json', chunk.slice(0, maxInner), '```', '_continued_'].join('\n');
+      return {
+        name: truncate(name, MAX_EMBED_TITLE),
+        value: hard.slice(0, MAX_FIELD_VALUE),
+        inline: false,
+      };
+    }
+    return {
+      name: truncate(name, MAX_EMBED_TITLE),
+      value: valueStr,
+      inline: false,
+    };
+  });
+}
+
+/**
+ * Split text into chunks ≤ maxChars, preferring newline boundaries.
+ * Never inserts `…` into the content; continuation is signaled by field names.
+ * @param {string} text
+ * @param {number} maxChars
+ * @returns {string[]}
+ */
+export function splitTextPreserveLines(text, maxChars) {
+  if (!text) return [''];
+  if (text.length <= maxChars) return [text];
+
+  const lines = text.split('\n');
+  /** @type {string[]} */
+  const chunks = [];
+  /** @type {string[]} */
+  let cur = [];
+  let curLen = 0;
+
+  const flush = () => {
+    if (!cur.length) return;
+    chunks.push(cur.join('\n'));
+    cur = [];
+    curLen = 0;
+  };
+
+  for (const line of lines) {
+    if (line.length > maxChars) {
+      // Extremely long single line: split explicitly (no ellipsis in content).
+      flush();
+      for (let i = 0; i < line.length; i += maxChars) {
+        chunks.push(line.slice(i, i + maxChars));
+      }
+      continue;
+    }
+    const nextLen = cur.length === 0 ? line.length : curLen + 1 + line.length;
+    if (cur.length && nextLen > maxChars) {
+      flush();
+    }
+    cur.push(line);
+    curLen = cur.join('\n').length;
+  }
+  flush();
+  return chunks.length ? chunks : [''];
 }
 
 /**
@@ -201,22 +264,20 @@ export function formatBeforeAfterFields(ep) {
  *   before?: object|null,
  *   after?: object|null,
  *   label: string,
- *   maxJsonChars?: number,
  * }} opts
  */
 export function formatBeforeAfterMarkdown(opts) {
-  const maxJson = opts.maxJsonChars ?? MAX_SNIPPET_JSON_CHARS;
   const lines = [`**${opts.label}**`];
   if (opts.before != null) {
     lines.push('**Before**');
     lines.push('```json');
-    lines.push(prettyJson(opts.before, maxJson));
+    lines.push(JSON.stringify(opts.before, null, 2));
     lines.push('```');
   }
   if (opts.after != null) {
     lines.push('**After**');
     lines.push('```json');
-    lines.push(prettyJson(opts.after, maxJson));
+    lines.push(JSON.stringify(opts.after, null, 2));
     lines.push('```');
   }
   if (opts.before != null && opts.after == null) {
@@ -226,17 +287,6 @@ export function formatBeforeAfterMarkdown(opts) {
     lines.push('_Field(s) newly observed in the response._');
   }
   return lines.join('\n');
-}
-
-/**
- * @param {unknown} value
- * @param {number} maxJson
- * @param {string} [footnote]
- */
-function truncJsonField(value, maxJson, footnote = '') {
-  const parts = ['```json', prettyJson(value, maxJson), '```'];
-  if (footnote) parts.push(footnote);
-  return truncate(parts.join('\n'), MAX_FIELD_VALUE);
 }
 
 function emptyResult() {
@@ -249,44 +299,36 @@ function emptyResult() {
   };
 }
 
-function prettyJson(value, maxChars = MAX_SNIPPET_JSON_CHARS) {
-  let s = JSON.stringify(value, null, 2);
-  if (s.length > maxChars) {
-    s = `${s.slice(0, maxChars - 1)}…`;
-  }
-  return s;
-}
-
 /**
- * Redact obvious secrets / PII-ish keys recursively; keep structure.
+ * Redact secrets / PII; do **not** mid-string-truncate ordinary values
+ * (ids, paths, titles stay intact for display samples).
  * @param {unknown} value
  */
 export function sanitizeSample(value) {
   if (value == null) return null;
-  return redactValue(value, '');
+  return redactValue(value);
 }
 
-function redactValue(value, path) {
+function redactValue(value) {
   if (value == null) return null;
   if (Array.isArray(value)) {
-    return value.slice(0, 3).map((v, i) => redactValue(v, `${path}[${i}]`));
+    return value.map((v) => redactValue(v));
   }
   if (typeof value === 'object') {
     /** @type {Record<string, unknown>} */
     const out = {};
     for (const [k, v] of Object.entries(value)) {
-      const child = path ? `${path}.${k}` : k;
       if (isSensitiveKey(k)) {
         out[k] = typeof v === 'string' ? '[redacted]' : redactSensitiveShape(v);
         continue;
       }
-      out[k] = redactValue(v, child);
+      out[k] = redactValue(v);
     }
     return out;
   }
   if (typeof value === 'string') {
     if (looksLikeToken(value)) return '[redacted]';
-    if (value.length > 80) return `${value.slice(0, 77)}…`;
+    if (looksLikeEmail(value)) return '[redacted-email]';
     return value;
   }
   if (typeof value === 'number' || typeof value === 'boolean') return value;
@@ -295,8 +337,7 @@ function redactValue(value, path) {
 
 function redactSensitiveShape(v) {
   if (v == null) return '[redacted]';
-  if (typeof v === 'string') return '[redacted]';
-  if (typeof v === 'number' || typeof v === 'boolean') return '[redacted]';
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return '[redacted]';
   if (Array.isArray(v)) return ['[redacted]'];
   return { redacted: true };
 }
@@ -318,9 +359,13 @@ function isSensitiveKey(key) {
 }
 
 function looksLikeToken(s) {
-  if (s.startsWith('eyJ')) return true; // JWT
+  if (s.startsWith('eyJ')) return true;
   if (/^[A-Za-z0-9_-]{40,}$/.test(s)) return true;
   return false;
+}
+
+function looksLikeEmail(s) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
 /**
@@ -377,7 +422,6 @@ export function placeholderFor(path, typeHint) {
   if (t === 'null') return null;
   if (t === 'array') return [];
   if (t === 'object') return {};
-  // Mild name heuristics when type unknown (still illustrative placeholders).
   const leaf = String(path).split('.').pop() || '';
   if (/^(is|has|can|discoverable|visible|enabled|active)/i.test(leaf)) return true;
   if (/count|order|index|height|width|size|duration/i.test(leaf)) return 0;

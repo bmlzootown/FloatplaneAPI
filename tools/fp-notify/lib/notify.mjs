@@ -83,27 +83,37 @@ export async function notifyFromDecision(opts) {
     };
   }
 
-  const posted = await postWebhook({
-    url: resolved.url,
-    payload: built.payload,
-    fetchImpl: opts.fetchImpl,
-    dryRun: opts.dryRun,
-  });
+  const payloads = built.payloads?.length ? built.payloads : [built.payload];
+  /** @type {object[]} */
+  const posts = [];
+  for (const payload of payloads) {
+    const posted = await postWebhook({
+      url: resolved.url,
+      payload,
+      fetchImpl: opts.fetchImpl,
+      dryRun: opts.dryRun,
+    });
+    posts.push(posted);
+    if (!posted.ok && !posted.skipped) break;
+  }
 
+  const last = posts[posts.length - 1] || {};
+  const allOk = posts.every((p) => p.ok);
   return {
     schemaVersion: 1,
     toolId: TOOL_ID,
     toolVersion: TOOL_VERSION,
-    notified: Boolean(posted.ok),
-    skipped: Boolean(posted.skipped),
-    dryRun: Boolean(posted.dryRun),
+    notified: allOk,
+    skipped: Boolean(last.skipped),
+    dryRun: Boolean(last.dryRun),
     lane: built.lane,
     action: decision.action,
     source: resolved.source,
-    webhook: posted.webhook,
-    status: posted.status ?? null,
-    bytes: posted.bytes ?? null,
-    error: posted.error || null,
-    reason: posted.reason || null,
+    webhook: last.webhook,
+    status: last.status ?? null,
+    bytes: posts.reduce((n, p) => n + (p.bytes || 0), 0),
+    messages: posts.length,
+    error: posts.find((p) => p.error)?.error || null,
+    reason: last.reason || null,
   };
 }
