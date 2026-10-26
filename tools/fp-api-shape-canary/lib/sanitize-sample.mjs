@@ -432,8 +432,9 @@ function placeholderForType(path, typeHint) {
   const leaf = String(path).split('.').pop() || '';
   if (/^(is|has|can|discoverable|visible|enabled|active)/i.test(leaf)) return true;
   if (/count|order|index|height|width|size|duration/i.test(leaf)) return 0;
-  if (/path|url|src/i.test(leaf)) return '…';
-  return '…';
+  if (/path|url|src/i.test(leaf)) return '[prior path]';
+  // Explicit prior-value marker for reconstructed before-fragments — not truncation.
+  return '[prior]';
 }
 
 function normalizeType(typeHint) {

@@ -425,7 +425,9 @@ export function placeholderFor(path, typeHint) {
   const leaf = String(path).split('.').pop() || '';
   if (/^(is|has|can|discoverable|visible|enabled|active)/i.test(leaf)) return true;
   if (/count|order|index|height|width|size|duration/i.test(leaf)) return 0;
-  return '…';
+  if (/path|url|src/i.test(leaf)) return '[prior path]';
+  // Explicit prior-value marker — never a mid-string ellipsis.
+  return '[prior]';
 }
 
 function normalizeType(typeHint) {
