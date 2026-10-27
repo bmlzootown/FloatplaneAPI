@@ -99,6 +99,7 @@ async function main(argv) {
       discordStorePath: args.discordStorePath,
       targets: args.targets,
       test: args.test,
+      publicSanitize: args.publicSanitize || args.test,
     });
     console.log(JSON.stringify(result, null, 2));
     // Unset webhook / noop skip → exit 0 so Automation is not failed.
@@ -137,6 +138,7 @@ function parseArgs(argv) {
     alsoAuth: false,
     stdin: false,
     test: false,
+    publicSanitize: false,
     decisionJson: null,
     decisionFile: null,
     prUrl: null,
@@ -157,6 +159,7 @@ function parseArgs(argv) {
     else if (a === '--also-auth') out.alsoAuth = true;
     else if (a === '--stdin') out.stdin = true;
     else if (a === '--test') out.test = true;
+    else if (a === '--public-sanitize') out.publicSanitize = true;
     else if (a === '--decision-json') out.decisionJson = rest.shift();
     else if (a === '--decision-file') out.decisionFile = rest.shift();
     else if (a === '--pr-url') out.prUrl = rest.shift();
@@ -188,7 +191,8 @@ Options:
   --pr-url <url>          Attach PR link to embed
   --also-auth             Also notify on needs_auth
   --dry-run               Resolve + build; do not POST
-  --test                  Fluxer only (format/smoke/draft — never Discord)
+  --test                  Fluxer only + public sanitize preview (never Discord)
+  --public-sanitize       Apply Discord public sanitize (implied by --test)
   --targets <list>        all | test | fluxer | discord | comma-list
   --url <https://...>     Override Fluxer URL (prefer env/store; never commit)
   --store-path <file>     Override Fluxer secrets file path
@@ -197,8 +201,8 @@ Options:
   -h, --help
 
 Target policy:
-  default / --targets all   Production: Fluxer + Discord (same payload)
-  --test / --targets test   Format experiments: Fluxer only — never Discord
+  default / --targets all   Production: Fluxer (rich) + Discord (public-sanitized)
+  --test / --targets test   Format experiments: Fluxer only, Discord sanitize preview
 
 Webhook secrets (never commit, never log raw URL):
   export FLUXER_WEBHOOK_URL='https://…'

@@ -2,8 +2,9 @@
  * High-level: resolve webhook target(s) → build payload from decision → POST on change.
  *
  * Production / live: fan out to Fluxer + Discord.
- * Discord gets an extra public-safe sanitize pass (user-self / subscription PII);
- * Fluxer (private) keeps the richer private samples.
+ * Discord gets an extra public-safe sanitize pass (ids/paths/account/billing).
+ * Fluxer (private) keeps richer samples, except `--test` / `publicSanitize`
+ * which previews the Discord sanitize on Fluxer only.
  * Test / draft / smoke (`test: true` or targets=test): Fluxer only — never Discord.
  */
 
@@ -25,6 +26,7 @@ import { TOOL_ID, TOOL_VERSION } from './constants.mjs';
  *   discordStorePath?: string|null,
  *   targets?: string|string[]|null,
  *   test?: boolean,
+ *   publicSanitize?: boolean,
  *   env?: NodeJS.ProcessEnv,
  *   fetchImpl?: typeof fetch,
  *   username?: string,
@@ -102,6 +104,8 @@ export async function notifyFromDecision(opts) {
   }
 
   const payloads = built.payloads?.length ? built.payloads : [built.payload];
+  // --test format smoke on Fluxer previews the same public sanitize Discord gets.
+  const publicSanitize = Boolean(opts.publicSanitize || opts.test);
   /** @type {object[]} */
   const deliveries = [];
 
@@ -111,7 +115,7 @@ export async function notifyFromDecision(opts) {
     for (const payload of payloads) {
       const posted = await postWebhook({
         url: target.url,
-        payload: payloadForWebhookTarget(target.id, payload),
+        payload: payloadForWebhookTarget(target.id, payload, { publicSanitize }),
         fetchImpl: opts.fetchImpl,
         dryRun: opts.dryRun,
       });

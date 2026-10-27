@@ -481,11 +481,52 @@ describe('resolve + notify', () => {
     assert.ok(!JSON.stringify(live).includes('/tok'));
 
     urls.length = 0;
+    /** @type {object|null} */
+    let smokeBody = null;
+    const smokeFetch = async (url, init) => {
+      urls.push(url);
+      smokeBody = JSON.parse(init.body);
+      return { status: 204, text: async () => '' };
+    };
+    const smokeDecision = {
+      action: 'update_shape_pr',
+      captureId: '2026-10-26T03-01-16-836Z',
+      decidedAt: '2026-10-26T03:01:16.000Z',
+      capture: {
+        byEndpoint: {
+          'content-post': {
+            hasDrift: true,
+            added: [],
+            removed: ['creator.discoverable'],
+            typeChanged: [],
+            sampleBefore: {
+              id: 'hkaeIJNlps',
+              title: 'How to Switch to Linux',
+              creator: {
+                id: '59f94c0bdd241b70349eb72b',
+                owner: '59f94c0bdd241b70349eb723',
+                title: 'LinusTechTips',
+                discoverable: true,
+              },
+            },
+            sampleAfter: {
+              id: 'hkaeIJNlps',
+              title: 'How to Switch to Linux',
+              creator: {
+                id: '59f94c0bdd241b70349eb72b',
+                owner: '59f94c0bdd241b70349eb723',
+                title: 'LinusTechTips',
+              },
+            },
+          },
+        },
+      },
+    };
     const smoke = await notifyFromDecision({
-      decision,
+      decision: smokeDecision,
       env,
       test: true,
-      fetchImpl,
+      fetchImpl: smokeFetch,
     });
     assert.equal(smoke.notified, true);
     assert.equal(smoke.targetMode, 'test');
@@ -495,6 +536,12 @@ describe('resolve + notify', () => {
     );
     assert.equal(urls.length, 1);
     assert.match(urls[0], /fluxer\.example/);
+    // --test previews Discord public sanitize on Fluxer
+    const smokeJson = JSON.stringify(smokeBody);
+    assert.match(smokeJson, /LinusTechTips/);
+    assert.doesNotMatch(smokeJson, /59f94c0bdd241b70349eb72b/);
+    assert.doesNotMatch(smokeJson, /hkaeIJNlps/);
+    assert.match(smokeJson, /\[redacted-id\]/);
   });
 
   it('dry-run does not call fetch', async () => {
@@ -554,19 +601,25 @@ describe('Discord public sanitization', () => {
     assert.equal(cleaned.startDate, '[redacted]');
     assert.equal(cleaned.endDate, '[redacted]');
     assert.equal(cleaned.creator, '[redacted-id]');
+    assert.equal(cleaned.plan.id, '[redacted-id]');
     assert.equal(cleaned.plan.price, '[redacted]');
     assert.equal(cleaned.plan.priceYearly, '[redacted]');
     assert.equal(cleaned.plan.creator, '[redacted-id]');
     assert.equal(cleaned.plan.title, 'Cool Plan');
   });
 
-  it('keeps public content-* LTT creator objects intact', () => {
+  it('censors ids, guids, paths, and owners on content samples; keeps titles', () => {
     const post = {
       id: 'hkaeIJNlps',
+      guid: 'hkaeIJNlps',
       title: 'How to Switch to Linux',
       channel: {
         creator: '59f94c0bdd241b70349eb72b',
         title: 'Floatplane',
+        icon: {
+          path: 'https://pbs.floatplane.com/creator_icons/abc/x.jpeg',
+          width: 600,
+        },
       },
       creator: {
         id: '59f94c0bdd241b70349eb72b',
@@ -576,10 +629,14 @@ describe('Discord public sanitization', () => {
     };
     const cleaned = sanitizeValueForDiscordPublic(post);
     assert.equal(cleaned.title, 'How to Switch to Linux');
+    assert.equal(cleaned.id, '[redacted-id]');
+    assert.equal(cleaned.guid, '[redacted-id]');
     assert.equal(cleaned.creator.title, 'LinusTechTips');
-    assert.equal(cleaned.creator.id, '59f94c0bdd241b70349eb72b');
-    // Bare channel.creator on content is a public creator ref — not a subscription row
-    assert.equal(cleaned.channel.creator, '59f94c0bdd241b70349eb72b');
+    assert.equal(cleaned.creator.id, '[redacted-id]');
+    assert.equal(cleaned.creator.owner, '[redacted-id]');
+    assert.equal(cleaned.channel.creator, '[redacted-id]');
+    assert.equal(cleaned.channel.icon.path, '[redacted]');
+    assert.equal(cleaned.channel.icon.width, 600);
   });
 
   it('applies extra sanitize to Discord payloads, not Fluxer', () => {

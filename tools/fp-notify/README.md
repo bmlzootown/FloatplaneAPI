@@ -21,14 +21,15 @@ timestamp only (e.g. `2026-10-26 03:01:16 UTC`) — Fluxer does not render Disco
 
 `preview` prints the payload and never POSTs.
 
-### Discord-only public sanitize
+### Discord public sanitize
 
-Fluxer is private. Before POSTing to Discord, `fp-notify` rewrites embed JSON samples to censor:
+Before POSTing to Discord (and on Fluxer when using `--test`), `fp-notify` rewrites embed JSON samples to censor:
 
-- **user-self** identity (username, displayName, account id, profileImage, …)
+- **ids / guids / paths / owner ids** (and bare creator ObjectIds)
+- **user-self** identity (username, displayName, profileImage, …)
 - **subscription** start/end dates, plan prices, bare creator ids
 
-Public **content-\*** (LTT) nested creator objects are kept. See `lib/discord-public-sanitize.mjs`.
+Human titles/types are kept. Live Fluxer production posts stay richer. See `lib/discord-public-sanitize.mjs`.
 
 ## Configure webhook URLs (never commit)
 
