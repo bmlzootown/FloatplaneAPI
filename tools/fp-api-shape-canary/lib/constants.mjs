@@ -7,7 +7,7 @@
  */
 
 export const TOOL_ID = 'fp-api-shape-canary';
-export const TOOL_VERSION = '3.1.0';
+export const TOOL_VERSION = '3.2.0';
 export const SCHEMA_VERSION = 1;
 
 /** Custom User-Agent for read-only probes (identify the watch project). */
@@ -103,6 +103,16 @@ export const ALLOWLIST = Object.freeze([
   },
 ]);
 
+/**
+ * Prefer this creator for content-creator / content-post example samples
+ * when the account is subscribed (LinusTechTips).
+ */
+export const PREFERRED_CREATOR = Object.freeze({
+  id: '59f94c0bdd241b70349eb72b',
+  label: 'LinusTechTips',
+  urlname: 'linustechtips',
+});
+
 /** Unauthenticated companion (list shape only; detail post remains 403). */
 export const UNAUTH_LIST = Object.freeze({
   id: 'content-creator-unauth',
@@ -111,7 +121,7 @@ export const UNAUTH_LIST = Object.freeze({
   role: 'unauth-list-companion',
   auth: 'none',
   /** Creator id used in assessment unauth sample (Linus Tech Tips). */
-  defaultCreatorId: '59f94c0bdd241b70349eb72b',
+  defaultCreatorId: PREFERRED_CREATOR.id,
 });
 
 export const EXIT = Object.freeze({

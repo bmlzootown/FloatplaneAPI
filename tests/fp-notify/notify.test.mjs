@@ -8,17 +8,35 @@ import {
   formatEndpointExample,
   humanEndpointName,
   shapeHeadline,
+  shapeSummarySentence,
   shouldNotify,
 } from '../../tools/fp-notify/lib/payloads.mjs';
 import {
   buildBeforeAfter,
   formatBeforeAfterField,
+  jsonValueToFields,
   placeholderFor,
   sanitizeSample,
+  splitTextPreserveLines,
 } from '../../tools/fp-notify/lib/before-after.mjs';
+import { formatObservedOn } from '../../tools/fp-notify/lib/endpoints.mjs';
 import { notifyFromDecision } from '../../tools/fp-notify/lib/notify.mjs';
-import { resolveWebhookUrl, redactWebhookUrl } from '../../tools/fp-notify/lib/resolve-webhook.mjs';
+import {
+  resolveWebhookUrl,
+  resolveWebhookTargets,
+  selectWebhookTargetIds,
+  redactWebhookUrl,
+} from '../../tools/fp-notify/lib/resolve-webhook.mjs';
+import {
+  sanitizeValueForDiscordPublic,
+  sanitizePayloadForDiscordPublic,
+  payloadForWebhookTarget,
+} from '../../tools/fp-notify/lib/discord-public-sanitize.mjs';
 import { MAX_FIELD_VALUE } from '../../tools/fp-notify/lib/constants.mjs';
+import {
+  formatAbsoluteTimestampFooter,
+  toUnixSeconds,
+} from '../../tools/fp-notify/lib/time.mjs';
 import { truncField } from '../../tools/fp-notify/lib/truncate.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -46,15 +64,25 @@ describe('shouldNotify', () => {
   });
 });
 
+describe('absolute timestamps', () => {
+  it('parses capture ids and formats plain UTC footers', () => {
+    const unix = toUnixSeconds('2026-10-26T03-01-16-836Z');
+    assert.equal(unix, Math.floor(Date.parse('2026-10-26T03:01:16.836Z') / 1000));
+    const footer = formatAbsoluteTimestampFooter('2026-10-26T03-01-16-836Z');
+    assert.equal(footer, '2026-10-26 03:01:16 UTC');
+    assert.doesNotMatch(footer, /<t:/);
+  });
+});
+
 describe('shape payload human copy + before/after', () => {
-  it('uses a human headline and illustrative before/after for removed field', () => {
+  it('uses a human headline, Observed on path, and time-only footer', () => {
     const decision = {
       action: 'open_shape_pr',
       reason: 'structural_drift',
-      captureId: 'c-test',
+      captureId: '2026-10-19T03-00-00-000Z',
       decidedAt: '2026-10-19T03:00:00.000Z',
       capture: {
-        captureId: 'c-test',
+        captureId: '2026-10-19T03-00-00-000Z',
         byEndpoint: {
           'content-post': {
             hasDrift: true,
@@ -74,6 +102,8 @@ describe('shape payload human copy + before/after', () => {
     const embed = built.payload.embeds[0];
     assert.match(embed.title, /Floatplane changed the shape of content posts/i);
     assert.doesNotMatch(embed.title, /open_shape_pr|structural_drift/i);
+    assert.match(embed.description, /Observed on: `\/api\/v3\/content\/post`/);
+    assert.doesNotMatch(embed.description, /Compared against|Read-only|OpenAPI/i);
     assert.doesNotMatch(embed.description, /Reason: `structural_drift`/);
 
     const ep = embed.fields.find((f) => /content posts/i.test(f.name));
@@ -81,20 +111,19 @@ describe('shape payload human copy + before/after', () => {
     assert.match(ep.value, /creator\.discoverable/);
     assert.match(ep.value, /creator\.newField/);
 
-    const example = embed.fields.find((f) => /Example response fragment/i.test(f.name));
-    assert.ok(example);
-    assert.match(example.value, /illustrative/i);
-    assert.match(example.value, /discoverable/);
-    assert.match(example.value, /Before/i);
-    assert.match(example.value, /After/i);
+    const beforeIll = embed.fields.find((f) => /Before \(illustrative\)/i.test(f.name));
+    const afterIll = embed.fields.find((f) => /After \(illustrative\)/i.test(f.name));
+    assert.ok(beforeIll);
+    assert.ok(afterIll);
+    assert.equal(beforeIll.inline, true);
+    assert.equal(afterIll.inline, true);
 
-    // Action / capture are secondary (footer), not headline fields.
-    assert.ok(!embed.fields.some((f) => f.name === 'Action'));
-    assert.ok(!embed.fields.some((f) => f.name === 'Capture'));
-    assert.match(embed.footer.text, /open_shape_pr/);
-    assert.match(embed.footer.text, /c-test/);
+    assert.ok(!embed.fields.some((f) => /Review|Open pull request/i.test(f.name)));
+    assert.ok(!embed.url);
+    assert.match(embed.footer.text, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$/);
+    assert.doesNotMatch(embed.footer.text, /<t:|api shape canary|read-only|open_shape_pr|update_shape_pr/i);
 
-    assert.ok(JSON.stringify(built.payload).length < 5500);
+    assert.ok(JSON.stringify(built.payload).length < 8000);
   });
 
   it('headlines a single removal clearly (PR #13 style)', () => {
@@ -111,7 +140,12 @@ describe('shape payload human copy + before/after', () => {
       shapeHeadline(['content-post'], by),
       'Floatplane removed a field from content posts',
     );
+    assert.equal(
+      shapeSummarySentence(['content-post'], by),
+      'Removed `creator.discoverable` from content posts.',
+    );
     assert.equal(humanEndpointName('content-post'), 'content posts');
+    assert.equal(formatObservedOn(['content-post']), 'Observed on: `/api/v3/content/post`');
 
     const ba = buildBeforeAfter(by['content-post']);
     assert.equal(ba.source, 'illustrative');
@@ -128,10 +162,96 @@ describe('shape payload human copy + before/after', () => {
       sampleAfter: { creator: { id: 'abc' } },
     });
     assert.equal(ba.source, 'capture');
-    assert.match(ba.label, /sanitized capture/i);
+    assert.match(ba.label, /live sanitized/i);
     assert.equal(ba.before.creator.email, '[redacted]');
     assert.equal(ba.before.creator.discoverable, true);
     assert.equal(ba.after.creator.discoverable, undefined);
+  });
+
+  it('renders live samples as side-by-side inline Before/After fields', () => {
+    const built = buildNotifyPayload({
+      action: 'update_shape_pr',
+      captureId: '2026-10-26T03-01-00-000Z',
+      decidedAt: '2026-10-26T03:01:00.000Z',
+      capture: {
+        captureId: '2026-10-26T03-01-00-000Z',
+        byEndpoint: {
+          'content-post': {
+            hasDrift: true,
+            removed: ['creator.discoverable'],
+            added: [],
+            typeChanged: [],
+            sampleBefore: {
+              id: 'post1',
+              title: 'LTT sample',
+              creator: { id: '59f94c0bdd241b70349eb72b', title: 'LinusTechTips', discoverable: true },
+            },
+            sampleAfter: {
+              id: 'post1',
+              title: 'LTT sample',
+              creator: { id: '59f94c0bdd241b70349eb72b', title: 'LinusTechTips' },
+            },
+          },
+        },
+      },
+    });
+    assert.equal(built.skipped, false);
+    const embed = built.payload.embeds[0];
+    assert.match(embed.description, /Observed on: `\/api\/v3\/content\/post`/);
+    const before = embed.fields.find((f) => /^Before \(live sanitized\)$/i.test(f.name));
+    const after = embed.fields.find((f) => /^After \(live sanitized\)$/i.test(f.name));
+    assert.ok(before);
+    assert.ok(after);
+    assert.equal(before.inline, true);
+    assert.equal(after.inline, true);
+    const bi = embed.fields.indexOf(before);
+    const ai = embed.fields.indexOf(after);
+    assert.equal(ai, bi + 1);
+    assert.match(before.value, /59f94c0bdd241b70349eb72b/);
+    assert.doesNotMatch(before.value, /…/);
+    assert.ok(!embed.fields.some((f) => /Review/i.test(f.name)));
+  });
+
+  it('splits oversized JSON into continued fields without mid-JSON ellipsis', () => {
+    /** @type {Record<string, string>} */
+    const big = { id: '59f94c0bdd241b70349eb72b', owner: '59f94c0bdd241b70349eb72b' };
+    for (let i = 0; i < 40; i++) {
+      big[`field${i}`] = `value-${i}-abcdefghijklmnopqrstuvwxyz`;
+    }
+    const fields = jsonValueToFields(big, 'Before (live sanitized)');
+    assert.ok(fields.length >= 2);
+    assert.match(fields[0].name, /1\/\d+/);
+    assert.match(fields[0].value, /_continued_/);
+    const jsonParts = fields.map((f) =>
+      f.value
+        .replace(/^```json\n/, '')
+        .replace(/\n```[\s\S]*$/, ''),
+    );
+    const parsed = JSON.parse(jsonParts.join('\n'));
+    assert.equal(parsed.id, '59f94c0bdd241b70349eb72b');
+    assert.equal(parsed.field39, 'value-39-abcdefghijklmnopqrstuvwxyz');
+    for (const f of fields) assert.ok(f.value.length <= 1024);
+  });
+
+  it('splitTextPreserveLines never inserts ellipsis', () => {
+    const text = Array.from({ length: 30 }, (_, i) => `  "k${i}": "v${i}",`).join('\n');
+    const parts = splitTextPreserveLines(text, 100);
+    assert.ok(parts.length > 1);
+    assert.equal(parts.join('\n'), text);
+    assert.ok(parts.every((p) => !p.includes('…')));
+  });
+
+  it('sanitizeSample keeps long non-secret strings intact', () => {
+    const id = '59f94c0bdd241b70349eb72b';
+    const title = `Hello world ${'abc '.repeat(40)}`;
+    const s = sanitizeSample({
+      owner: id,
+      title,
+      email: 'a@b.c',
+    });
+    assert.equal(s.owner, id);
+    assert.equal(s.title, title);
+    assert.equal(s.email, '[redacted]');
   });
 
   it('formatEndpointExample caps path lists; field trunc respects Discord limit', () => {
@@ -159,12 +279,13 @@ describe('shape payload human copy + before/after', () => {
 });
 
 describe('frontend payload', () => {
-  it('summarizes build without inventing API claims', () => {
+  it('summarizes build change without jargon fields or PR review', () => {
     const built = buildNotifyPayload(
       {
         action: 'update_monitor_pr',
         reason: 'phase1_drives_pr_phase2_enriches_body',
         orchestratorId: 'phase2.3-frontend-evidence-orchestrate',
+        decidedAt: '2026-10-26T18:00:00.000Z',
         phase1: {
           action: 'update_monitor_pr',
           buildId: '4.5.25-340-92712da',
@@ -173,34 +294,46 @@ describe('frontend payload', () => {
         phase2: {
           headline: '350 structured op(s) disappeared from frontend evidence; 27 provenance move(s)',
         },
-        pendingObservations: [{ buildId: '4.5.25-340-92712da', observationId: 'abc' }],
-        commitSequence: {
-          commits: [
-            {
-              step: 'observe',
-              phase: 'phase1',
-              message: 'Observe Floatplane frontend 4.5.25-340-92712da',
-            },
-          ],
-        },
-        analyses: [{ observationId: 'abc', comparisonStatus: 'changed', counts: { added: 2 } }],
+        pendingObservations: [
+          { buildId: '4.5.25-340-92712da', observationId: 'abc' },
+          { buildId: 'older', observationId: 'xyz' },
+        ],
+        analyses: [
+          { observationId: 'abc', comparisonStatus: 'complete', extractStatus: 'not_applicable' },
+        ],
       },
       { prUrl: 'https://github.com/bmlzootown/FloatplaneAPI/pull/10' },
     );
     assert.equal(built.skipped, false);
     assert.equal(built.lane, 'frontend');
     const embed = built.payload.embeds[0];
-    assert.match(embed.title, /New frontend build observed/i);
+    assert.match(embed.title, /Frontend build changed/i);
     assert.doesNotMatch(embed.title, /open_monitor_pr|Phase/i);
     const desc = embed.description;
-    assert.match(desc, /not.*server API/i);
-    assert.doesNotMatch(desc, /OpenAPI schema changed/i);
     assert.match(desc, /4\.5\.25-340-92712da/);
     assert.match(desc, /4\.5\.22-316-d74397b/);
-    assert.ok(!embed.fields.some((f) => f.name === 'Action' || f.name === 'Phase 1'));
-    const saw = embed.fields.find((f) => f.name === 'What we saw');
-    assert.ok(saw);
-    assert.match(saw.value, /350 structured/);
+    assert.match(desc, /350 structured/);
+    assert.doesNotMatch(desc, /not_applicable|Pending observations/i);
+    assert.ok(!embed.fields.some((f) => /What we saw|Pending|Review/i.test(f.name)));
+    assert.ok(!embed.url);
+    assert.match(embed.footer.text, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$/);
+    assert.doesNotMatch(embed.footer.text, /<t:|Frontend watch|evidence only|update_monitor_pr/i);
+  });
+
+  it('omits junk analysis status lines like complete / not_applicable', () => {
+    const built = buildNotifyPayload({
+      action: 'open_monitor_pr',
+      decidedAt: '2026-10-26T12:00:00.000Z',
+      phase1: { buildId: '4.5.26-355-797bc04', previousBuildId: '4.5.25-340-92712da' },
+      analyses: [
+        { comparisonStatus: 'complete', extractStatus: 'not_applicable' },
+        { comparisonStatus: 'complete' },
+      ],
+    });
+    const embed = built.payload.embeds[0];
+    assert.match(embed.description, /4\.5\.26-355-797bc04/);
+    assert.doesNotMatch(embed.description, /not_applicable|complete/i);
+    assert.equal(embed.fields.length, 0);
   });
 });
 
@@ -210,6 +343,15 @@ describe('resolve + notify', () => {
       redactWebhookUrl('https://fluxer.example/api/v1/webhooks/123/sekrettoken'),
       'https://fluxer.example/…(redacted)',
     );
+  });
+
+  it('selectWebhookTargetIds: production=all, --test=fluxer only', () => {
+    assert.deepEqual(selectWebhookTargetIds(null).ids, ['fluxer', 'discord']);
+    assert.deepEqual(selectWebhookTargetIds('all').ids, ['fluxer', 'discord']);
+    assert.deepEqual(selectWebhookTargetIds(null, { test: true }).ids, ['fluxer']);
+    assert.deepEqual(selectWebhookTargetIds('test').ids, ['fluxer']);
+    assert.deepEqual(selectWebhookTargetIds('discord').ids, ['discord']);
+    assert.deepEqual(selectWebhookTargetIds('fluxer,discord').ids, ['fluxer', 'discord']);
   });
 
   it('resolves from store file and skips when unset', async () => {
@@ -228,10 +370,44 @@ describe('resolve + notify', () => {
     assert.equal(ok.url.startsWith('https://'), true);
   });
 
+  it('resolveWebhookTargets fans out production and keeps --test on Fluxer', async () => {
+    const fluxer = path.join(TMP, 'fluxer.url');
+    const discord = path.join(TMP, 'discord.url');
+    await writeFile(fluxer, 'https://fluxer.example/api/v1/webhooks/1/tok\n', { mode: 0o600 });
+    await writeFile(discord, 'https://discord.com/api/webhooks/1/tok\n', { mode: 0o600 });
+
+    const all = await resolveWebhookTargets({
+      env: {},
+      storePath: fluxer,
+      discordStorePath: discord,
+      targets: 'all',
+    });
+    assert.equal(all.ok, true);
+    assert.equal(all.mode, 'all');
+    assert.deepEqual(
+      all.targets.map((t) => t.id),
+      ['fluxer', 'discord'],
+    );
+
+    const testOnly = await resolveWebhookTargets({
+      env: {},
+      storePath: fluxer,
+      discordStorePath: discord,
+      test: true,
+    });
+    assert.equal(testOnly.ok, true);
+    assert.equal(testOnly.mode, 'test');
+    assert.deepEqual(
+      testOnly.targets.map((t) => t.id),
+      ['fluxer'],
+    );
+  });
+
   it('notifyFromDecision skips noop and posts on change', async () => {
     const skipped = await notifyFromDecision({
       decision: { action: 'noop' },
       env: { FLUXER_WEBHOOK_URL: 'https://example.test/hook' },
+      targets: 'fluxer',
     });
     assert.equal(skipped.skipped, true);
     assert.equal(skipped.notified, false);
@@ -247,7 +423,7 @@ describe('resolve + notify', () => {
       decision: {
         action: 'open_shape_pr',
         reason: 'structural_drift',
-        captureId: 'c1',
+        captureId: '2026-10-26T03-01-16-836Z',
         capture: {
           byEndpoint: {
             'content-post': {
@@ -261,23 +437,119 @@ describe('resolve + notify', () => {
         },
       },
       env: { FLUXER_WEBHOOK_URL: 'https://example.test/api/v1/webhooks/1/tok' },
+      targets: 'fluxer',
       fetchImpl,
-      prUrl: 'https://github.com/example/pr/1',
     });
     assert.equal(posted.notified, true);
     assert.equal(posted.webhook.includes('redacted'), true);
     assert.ok(!JSON.stringify(posted).includes('/tok'));
     assert.match(postedBody.embeds[0].title, /removed a field/i);
-    const frag = postedBody.embeds[0].fields.find((f) => /Example response fragment/i.test(f.name));
-    assert.ok(frag);
-    assert.match(frag.value, /discoverable/);
+    assert.match(postedBody.embeds[0].description, /Observed on/);
+    assert.ok(!postedBody.embeds[0].fields.some((f) => /Review/i.test(f.name)));
+    const before = postedBody.embeds[0].fields.find((f) => /Before \(illustrative\)/i.test(f.name));
+    assert.ok(before);
+    assert.match(before.value, /discoverable/);
+  });
+
+  it('production notify fans out to Fluxer + Discord; --test stays Fluxer-only', async () => {
+    /** @type {string[]} */
+    const urls = [];
+    const fetchImpl = async (url) => {
+      urls.push(url);
+      return { status: 204, text: async () => '' };
+    };
+    const decision = {
+      action: 'open_monitor_pr',
+      phase1: { buildId: '4.5.26-355-797bc04', previousBuildId: '4.5.25-340-92712da' },
+      decidedAt: '2026-10-26T18:00:00.000Z',
+    };
+    const env = {
+      FLUXER_WEBHOOK_URL: 'https://fluxer.example/api/v1/webhooks/1/tok',
+      DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/2/tok',
+    };
+
+    const live = await notifyFromDecision({ decision, env, fetchImpl });
+    assert.equal(live.notified, true);
+    assert.equal(live.targetMode, 'all');
+    assert.deepEqual(
+      live.targets.map((t) => t.id),
+      ['fluxer', 'discord'],
+    );
+    assert.equal(urls.length, 2);
+    assert.match(urls[0], /fluxer\.example/);
+    assert.match(urls[1], /discord\.com/);
+    assert.ok(!JSON.stringify(live).includes('/tok'));
+
+    urls.length = 0;
+    /** @type {object|null} */
+    let smokeBody = null;
+    const smokeFetch = async (url, init) => {
+      urls.push(url);
+      smokeBody = JSON.parse(init.body);
+      return { status: 204, text: async () => '' };
+    };
+    const smokeDecision = {
+      action: 'update_shape_pr',
+      captureId: '2026-10-26T03-01-16-836Z',
+      decidedAt: '2026-10-26T03:01:16.000Z',
+      capture: {
+        byEndpoint: {
+          'content-post': {
+            hasDrift: true,
+            added: [],
+            removed: ['creator.discoverable'],
+            typeChanged: [],
+            sampleBefore: {
+              id: 'hkaeIJNlps',
+              title: 'How to Switch to Linux',
+              creator: {
+                id: '59f94c0bdd241b70349eb72b',
+                owner: '59f94c0bdd241b70349eb723',
+                title: 'LinusTechTips',
+                discoverable: true,
+              },
+            },
+            sampleAfter: {
+              id: 'hkaeIJNlps',
+              title: 'How to Switch to Linux',
+              creator: {
+                id: '59f94c0bdd241b70349eb72b',
+                owner: '59f94c0bdd241b70349eb723',
+                title: 'LinusTechTips',
+              },
+            },
+          },
+        },
+      },
+    };
+    const smoke = await notifyFromDecision({
+      decision: smokeDecision,
+      env,
+      test: true,
+      fetchImpl: smokeFetch,
+    });
+    assert.equal(smoke.notified, true);
+    assert.equal(smoke.targetMode, 'test');
+    assert.deepEqual(
+      smoke.targets.map((t) => t.id),
+      ['fluxer'],
+    );
+    assert.equal(urls.length, 1);
+    assert.match(urls[0], /fluxer\.example/);
+    // --test previews Discord public sanitize on Fluxer
+    const smokeJson = JSON.stringify(smokeBody);
+    assert.match(smokeJson, /LinusTechTips/);
+    assert.doesNotMatch(smokeJson, /59f94c0bdd241b70349eb72b/);
+    assert.doesNotMatch(smokeJson, /hkaeIJNlps/);
+    assert.match(smokeJson, /\[redacted-id\]/);
   });
 
   it('dry-run does not call fetch', async () => {
     let called = false;
     const r = await notifyFromDecision({
-      decision: { action: 'open_monitor_pr', phase1: { buildId: 'x' } },
+      decision: { action: 'open_monitor_pr', phase1: { buildId: 'x' }, decidedAt: '2026-10-26T12:00:00.000Z' },
       env: { FLUXER_WEBHOOK_URL: 'https://example.test/hook' },
+      targets: 'fluxer',
       dryRun: true,
       fetchImpl: async () => {
         called = true;
@@ -287,5 +559,173 @@ describe('resolve + notify', () => {
     assert.equal(r.dryRun, true);
     assert.equal(r.notified, true);
     assert.equal(called, false);
+  });
+});
+
+describe('Discord public sanitization', () => {
+  it('censors user-self identity on Discord only', () => {
+    const userSelf = {
+      id: '5c3014455fb1a5617b77978e',
+      username: 'bmlzootown',
+      displayName: 'Brandon',
+      email: '[redacted]',
+      profileImage: { path: 'https://example/avatar.png' },
+      isModerator: false,
+    };
+    const cleaned = sanitizeValueForDiscordPublic(userSelf);
+    assert.equal(cleaned.id, '[redacted-id]');
+    assert.equal(cleaned.username, '[redacted]');
+    assert.equal(cleaned.displayName, '[redacted]');
+    assert.equal(cleaned.email, '[redacted]');
+    assert.deepEqual(cleaned.profileImage, { redacted: true });
+    assert.equal(cleaned.isModerator, '[redacted]');
+  });
+
+  it('censors subscription dates, prices, and creator ids', () => {
+    const sub = {
+      startDate: '2025-07-07T23:02:07.673Z',
+      endDate: '2026-07-07T23:02:07.673Z',
+      paymentID: null,
+      interval: 'year',
+      creator: '686c49c403ee2657d069c916',
+      plan: {
+        id: 'plan1',
+        title: 'Cool Plan',
+        price: '5.00',
+        priceYearly: '50.00',
+        currency: 'USD',
+        creator: '686c49c403ee2657d069c916',
+      },
+    };
+    const cleaned = sanitizeValueForDiscordPublic(sub);
+    assert.equal(cleaned.startDate, '[redacted]');
+    assert.equal(cleaned.endDate, '[redacted]');
+    assert.equal(cleaned.creator, '[redacted-id]');
+    assert.equal(cleaned.plan.id, '[redacted-id]');
+    assert.equal(cleaned.plan.price, '[redacted]');
+    assert.equal(cleaned.plan.priceYearly, '[redacted]');
+    assert.equal(cleaned.plan.creator, '[redacted-id]');
+    assert.equal(cleaned.plan.title, 'Cool Plan');
+  });
+
+  it('censors ids, guids, paths, and owners on content samples; keeps titles', () => {
+    const post = {
+      id: 'hkaeIJNlps',
+      guid: 'hkaeIJNlps',
+      title: 'How to Switch to Linux',
+      channel: {
+        creator: '59f94c0bdd241b70349eb72b',
+        title: 'Floatplane',
+        icon: {
+          path: 'https://pbs.floatplane.com/creator_icons/abc/x.jpeg',
+          width: 600,
+        },
+      },
+      creator: {
+        id: '59f94c0bdd241b70349eb72b',
+        owner: '59f94c0bdd241b70349eb723',
+        title: 'LinusTechTips',
+      },
+    };
+    const cleaned = sanitizeValueForDiscordPublic(post);
+    assert.equal(cleaned.title, 'How to Switch to Linux');
+    assert.equal(cleaned.id, '[redacted-id]');
+    assert.equal(cleaned.guid, '[redacted-id]');
+    assert.equal(cleaned.creator.title, 'LinusTechTips');
+    assert.equal(cleaned.creator.id, '[redacted-id]');
+    assert.equal(cleaned.creator.owner, '[redacted-id]');
+    assert.equal(cleaned.channel.creator, '[redacted-id]');
+    assert.equal(cleaned.channel.icon.path, '[redacted]');
+    assert.equal(cleaned.channel.icon.width, 600);
+  });
+
+  it('applies extra sanitize to Discord payloads, not Fluxer', () => {
+    const payload = {
+      username: 'FloatplaneAPI Watch',
+      embeds: [
+        {
+          title: 'test',
+          fields: [
+            {
+              name: 'Before (live sanitized)',
+              value:
+                '```json\n' +
+                JSON.stringify(
+                  {
+                    username: 'secretuser',
+                    displayName: 'Secret',
+                    id: '5c3014455fb1a5617b77978e',
+                  },
+                  null,
+                  2,
+                ) +
+                '\n```',
+            },
+          ],
+        },
+      ],
+    };
+    const discord = sanitizePayloadForDiscordPublic(payload);
+    assert.match(discord.embeds[0].fields[0].value, /\[redacted\]/);
+    assert.match(discord.embeds[0].fields[0].value, /\[redacted-id\]/);
+    assert.doesNotMatch(discord.embeds[0].fields[0].value, /secretuser/);
+
+    const fluxer = payloadForWebhookTarget('fluxer', payload);
+    assert.match(fluxer.embeds[0].fields[0].value, /secretuser/);
+    assert.equal(payloadForWebhookTarget('discord', payload).embeds[0].fields[0].value, discord.embeds[0].fields[0].value);
+  });
+
+  it('fan-out posts Discord-sanitized body while Fluxer keeps private sample', async () => {
+    /** @type {Map<string, object>} */
+    const bodies = new Map();
+    const fetchImpl = async (url, init) => {
+      bodies.set(url, JSON.parse(init.body));
+      return { status: 204, text: async () => '' };
+    };
+    const decision = {
+      action: 'update_shape_pr',
+      captureId: '2026-10-26T03-01-16-836Z',
+      decidedAt: '2026-10-26T03:01:16.000Z',
+      capture: {
+        byEndpoint: {
+          'user-self': {
+            hasDrift: true,
+            added: [],
+            removed: ['email'],
+            typeChanged: [],
+            sampleBefore: {
+              id: '5c3014455fb1a5617b77978e',
+              username: 'bmlzootown',
+              displayName: 'Brandon',
+              email: 'hide@me',
+            },
+            sampleAfter: {
+              id: '5c3014455fb1a5617b77978e',
+              username: 'bmlzootown',
+              displayName: 'Brandon',
+            },
+          },
+        },
+      },
+    };
+    const r = await notifyFromDecision({
+      decision,
+      env: {
+        FLUXER_WEBHOOK_URL: 'https://fluxer.example/api/v1/webhooks/1/tok',
+        DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/2/tok',
+      },
+      fetchImpl,
+    });
+    assert.equal(r.notified, true);
+    const fluxerBody = bodies.get('https://fluxer.example/api/v1/webhooks/1/tok');
+    const discordBody = bodies.get('https://discord.com/api/webhooks/2/tok');
+    assert.ok(fluxerBody && discordBody);
+    const fluxerJson = JSON.stringify(fluxerBody);
+    const discordJson = JSON.stringify(discordBody);
+    assert.match(fluxerJson, /bmlzootown/);
+    assert.doesNotMatch(discordJson, /bmlzootown/);
+    assert.doesNotMatch(discordJson, /Brandon/);
+    assert.match(discordJson, /\[redacted\]/);
+    assert.ok(!JSON.stringify(r).includes('/tok'));
   });
 });
