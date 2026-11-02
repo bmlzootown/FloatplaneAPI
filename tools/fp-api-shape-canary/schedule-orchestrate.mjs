@@ -103,6 +103,13 @@ function summarizeEndpointDiff(d, extra = {}) {
     }
   }
 
+  // For illustrative fallbacks: remaining sibling keys under parents of removals
+  // so After does not collapse to `"creator": {}` when nested fields were removed.
+  const remainingMeta = remainingSiblingsForRemovals(
+    driftSlice.removed,
+    extra.currentTree,
+  );
+
   return {
     hasDrift: Boolean(d.hasDrift),
     addedCount: added.length,
@@ -118,9 +125,76 @@ function summarizeEndpointDiff(d, extra = {}) {
       typeChanged.length > PATH_SAMPLE_CAP,
     note: d.note || undefined,
     ...(Object.keys(typeHints).length ? { typeHints } : {}),
+    ...(remainingMeta.remainingByParent
+      ? { remainingByParent: remainingMeta.remainingByParent }
+      : {}),
+    ...(remainingMeta.observedPaths?.length
+      ? { observedPaths: remainingMeta.observedPaths }
+      : {}),
+    ...(Object.keys(remainingMeta.remainingTypeHints || {}).length
+      ? { remainingTypeHints: remainingMeta.remainingTypeHints }
+      : {}),
     ...(sampleBefore != null ? { sampleBefore } : {}),
     ...(sampleAfter != null ? { sampleAfter } : {}),
     ...(sampleSource ? { sampleSource } : {}),
+  };
+}
+
+/**
+ * Direct child keys still present under parents of removed paths (from current tree).
+ * @param {string[]} removed
+ * @param {object|undefined} currentTree
+ */
+function remainingSiblingsForRemovals(removed, currentTree) {
+  /** @type {{ remainingByParent?: Record<string, string[]>, observedPaths?: string[], remainingTypeHints?: Record<string, string|string[]> }} */
+  const empty = {};
+  if (!currentTree || !removed?.length) return empty;
+  const flat = flattenFieldTree(currentTree);
+  const observedPaths = Object.keys(flat).filter((p) => p && p !== '$');
+  /** @type {Record<string, string[]>} */
+  const remainingByParent = {};
+  /** @type {Record<string, string|string[]>} */
+  const remainingTypeHints = {};
+
+  const parents = new Set();
+  for (const path of removed) {
+    if (!path || path === '$') continue;
+    const parts = String(path)
+      .replace(/^\$\[\]\./, '')
+      .replace(/^\$\./, '')
+      .replace(/\[\]/g, '')
+      .split('.')
+      .filter((p) => p && p !== '$');
+    if (parts.length < 2) continue;
+    parents.add(parts.slice(0, -1).join('.'));
+  }
+
+  for (const parent of parents) {
+    const prefix = `${parent}.`;
+    /** @type {string[]} */
+    const leaves = [];
+    for (const p of observedPaths) {
+      const norm = String(p)
+        .replace(/^\$\[\]\./, '')
+        .replace(/^\$\./, '')
+        .replace(/^\$/, '');
+      if (!norm.startsWith(prefix)) continue;
+      const rest = norm.slice(prefix.length);
+      const child = rest.split(/\.|\[\]/)[0];
+      if (!child) continue;
+      if (!leaves.includes(child)) leaves.push(child);
+      if (flat[p]?.type != null) remainingTypeHints[`${parent}.${child}`] = flat[p].type;
+      // Prefer type at the direct child node when present
+      const childPath = `${parent}.${child}`;
+      if (flat[childPath]?.type != null) remainingTypeHints[childPath] = flat[childPath].type;
+    }
+    if (leaves.length) remainingByParent[parent] = leaves;
+  }
+
+  return {
+    ...(Object.keys(remainingByParent).length ? { remainingByParent } : {}),
+    ...(observedPaths.length ? { observedPaths } : {}),
+    ...(Object.keys(remainingTypeHints).length ? { remainingTypeHints } : {}),
   };
 }
 

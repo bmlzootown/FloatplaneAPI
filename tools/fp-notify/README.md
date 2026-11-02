@@ -110,6 +110,10 @@ Before/after prefers **live sanitized bodies** when present. **No silent mid-JSO
 truncation** — oversized samples split into continued fields/messages. Side-by-side
 `inline: true` when both fit one field each.
 
+Illustrative fallbacks use observed field-tree `remainingByParent` so After does
+**not** collapse parents to `{}` when only nested keys were removed (e.g. `creator`
+still shows `title` / `urlname` / `icon`).
+
 Frontend alerts: build id changed + brief human summary when available. No
 “What we saw” status jargon, pending-observations noise, or PR review links.
 

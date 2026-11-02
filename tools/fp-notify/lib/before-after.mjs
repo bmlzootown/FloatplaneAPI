@@ -67,7 +67,6 @@ export function buildBeforeAfter(ep) {
   }
 
   const before = {};
-  const after = {};
   let pathCount = 0;
 
   for (const path of removed) {
@@ -76,6 +75,36 @@ export function buildBeforeAfter(ep) {
     setAtPath(before, path, placeholderFor(path, typeHints[path] || 'boolean'));
     pathCount += 1;
   }
+  for (const t of typeChanged) {
+    if (pathCount >= MAX_SNIPPET_PATHS) break;
+    const path = typeof t === 'string' ? t : t?.path;
+    if (!path || path === '$') continue;
+    const fromType = typeof t === 'object' ? t.from : typeHints[`${path}__from`];
+    setAtPath(before, path, placeholderFor(path, fromType || 'string'));
+    pathCount += 1;
+  }
+
+  // Remaining siblings under parents of removals (from observed field-tree).
+  // Prevents After from collapsing to `"creator": {}` when only nested keys left.
+  const remainingByParent =
+    ep.remainingByParent && typeof ep.remainingByParent === 'object'
+      ? ep.remainingByParent
+      : remainingByParentFromPaths(removed, ep.observedPaths || ep.currentPaths || []);
+
+  fillRemainingSiblings(before, {
+    removed,
+    remainingByParent,
+    typeHints,
+    typeHintsByLeaf: ep.remainingTypeHints || {},
+  });
+
+  // After = before minus removed leaves, plus additions / new types.
+  const after = structuredClone(before);
+  for (const path of removed) {
+    if (!path || path === '$') continue;
+    deleteAtPath(after, path);
+  }
+  pathCount = Object.keys(flattenLeafHints(before)).length;
   for (const path of added) {
     if (pathCount >= MAX_SNIPPET_PATHS) break;
     if (path === '$') continue;
@@ -86,15 +115,23 @@ export function buildBeforeAfter(ep) {
     if (pathCount >= MAX_SNIPPET_PATHS) break;
     const path = typeof t === 'string' ? t : t?.path;
     if (!path || path === '$') continue;
-    const fromType = typeof t === 'object' ? t.from : typeHints[`${path}__from`];
     const toType = typeof t === 'object' ? t.to : typeHints[`${path}__to`] || typeHints[path];
-    setAtPath(before, path, placeholderFor(path, fromType || 'string'));
     setAtPath(after, path, placeholderFor(path, toType || 'string'));
     pathCount += 1;
   }
 
-  ensureParents(before, [...removed, ...typeChanged.map((t) => (typeof t === 'string' ? t : t?.path)).filter(Boolean)]);
-  ensureParents(after, [...added, ...removed, ...typeChanged.map((t) => (typeof t === 'string' ? t : t?.path)).filter(Boolean)]);
+  // Re-assert remaining siblings on after (in case delete cleared a parent).
+  const keepLeaves = new Set(
+    Object.values(remainingByParent || {}).flatMap((leaves) => leaves || []),
+  );
+  fillRemainingSiblings(after, {
+    removed,
+    remainingByParent,
+    typeHints,
+    typeHintsByLeaf: ep.remainingTypeHints || {},
+  });
+  // Prune accidental empty parents from deletes, but keep remaining object stubs (e.g. icon: {}).
+  pruneEmptyObjects(after, { keepLeafKeys: keepLeaves });
 
   if (!Object.keys(before).length && !Object.keys(after).length) {
     return emptyResult();
@@ -387,20 +424,161 @@ export function setAtPath(root, path, value) {
   cur[parts[parts.length - 1]] = value;
 }
 
-function ensureParents(root, paths) {
-  for (const path of paths) {
+/**
+ * Delete a leaf at a dotted path. Leaves empty parents in place (caller may prune).
+ * @param {object} root
+ * @param {string} path
+ */
+export function deleteAtPath(root, path) {
+  const parts = splitPath(path);
+  if (!parts.length) return;
+  let cur = root;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const p = parts[i];
+    if (cur == null || typeof cur !== 'object' || !(p in cur)) return;
+    cur = cur[p];
+  }
+  if (cur && typeof cur === 'object' && !Array.isArray(cur)) {
+    delete cur[parts[parts.length - 1]];
+  }
+}
+
+/**
+ * Map parentPath → remaining direct child keys still present after removals.
+ * @param {string[]} removed
+ * @param {string[]} observedPaths flat field-tree paths (current / after)
+ * @returns {Record<string, string[]>}
+ */
+export function remainingByParentFromPaths(removed, observedPaths) {
+  /** @type {Record<string, string[]>} */
+  const out = {};
+  if (!removed?.length || !observedPaths?.length) return out;
+
+  const parents = new Set();
+  for (const path of removed) {
     if (!path || path === '$') continue;
-    const parts = splitPath(path);
-    if (parts.length < 2) continue;
-    let cur = root;
-    for (let i = 0; i < parts.length - 1; i++) {
-      const p = parts[i];
-      if (cur[p] == null || typeof cur[p] !== 'object' || Array.isArray(cur[p])) {
-        cur[p] = {};
+    const parent = parentPathOf(path);
+    if (parent) parents.add(parent);
+  }
+
+  for (const parent of parents) {
+    const prefix = `${parent}.`;
+    /** @type {string[]} */
+    const leaves = [];
+    for (const p of observedPaths) {
+      const norm = String(p).replace(/^\$\[\]\./, '').replace(/^\$\./, '').replace(/^\$/, '');
+      if (!norm.startsWith(prefix)) continue;
+      const rest = norm.slice(prefix.length);
+      const child = rest.split(/\.|\[\]/)[0];
+      if (!child) continue;
+      if (!leaves.includes(child)) leaves.push(child);
+    }
+    if (leaves.length) out[parent] = leaves;
+  }
+  return out;
+}
+
+/**
+ * @param {object} root
+ * @param {{
+ *   removed: string[],
+ *   remainingByParent: Record<string, string[]>,
+ *   typeHints?: Record<string, string|string[]>,
+ *   typeHintsByLeaf?: Record<string, string|string[]>,
+ * }} opts
+ */
+export function fillRemainingSiblings(root, opts) {
+  const remainingByParent = opts.remainingByParent || {};
+  const typeHints = opts.typeHints || {};
+  const byLeaf = opts.typeHintsByLeaf || {};
+  for (const [parent, leaves] of Object.entries(remainingByParent)) {
+    if (!parent || !Array.isArray(leaves) || !leaves.length) continue;
+    for (const leaf of leaves.slice(0, 12)) {
+      const full = `${parent}.${leaf}`;
+      // Skip keys that are themselves removed in this drift.
+      if ((opts.removed || []).some((r) => r === full || String(r).startsWith(`${full}.`) || String(r).startsWith(`${full}[]`))) {
+        continue;
       }
-      cur = cur[p];
+      const parts = splitPath(full);
+      let cur = root;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const p = parts[i];
+        if (cur[p] == null || typeof cur[p] !== 'object' || Array.isArray(cur[p])) {
+          cur[p] = {};
+        }
+        cur = cur[p];
+      }
+      const key = parts[parts.length - 1];
+      if (key in cur) continue;
+      const hint = typeHints[full] || byLeaf[full] || byLeaf[leaf] || guessTypeForLeaf(leaf);
+      cur[key] = placeholderFor(full, hint);
     }
   }
+}
+
+/**
+ * Remove empty plain objects recursively (after nested removals).
+ * @param {unknown} value
+ * @param {{ keepLeafKeys?: Set<string> }} [opts]
+ * @returns {boolean} true if value is now empty and removable
+ */
+export function pruneEmptyObjects(value, opts = {}) {
+  const keepLeafKeys = opts.keepLeafKeys || new Set();
+  if (value == null || typeof value !== 'object') return false;
+  if (Array.isArray(value)) {
+    for (let i = value.length - 1; i >= 0; i--) {
+      if (pruneEmptyObjects(value[i], opts)) value.splice(i, 1);
+    }
+    return value.length === 0;
+  }
+  for (const [k, v] of Object.entries(value)) {
+    if (pruneEmptyObjects(v, opts)) {
+      if (!keepLeafKeys.has(k)) delete value[k];
+    } else if (
+      v &&
+      typeof v === 'object' &&
+      !Array.isArray(v) &&
+      Object.keys(v).length === 0 &&
+      !keepLeafKeys.has(k)
+    ) {
+      delete value[k];
+    }
+  }
+  return Object.keys(value).length === 0;
+}
+
+function parentPathOf(path) {
+  const parts = splitPath(path);
+  if (parts.length < 2) return '';
+  return parts.slice(0, -1).join('.');
+}
+
+function flattenLeafHints(obj, prefix = '') {
+  /** @type {Record<string, true>} */
+  const out = {};
+  if (!obj || typeof obj !== 'object') return out;
+  if (Array.isArray(obj)) {
+    if (obj[0] && typeof obj[0] === 'object') {
+      Object.assign(out, flattenLeafHints(obj[0], prefix));
+    }
+    return out;
+  }
+  for (const [k, v] of Object.entries(obj)) {
+    const p = prefix ? `${prefix}.${k}` : k;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      Object.assign(out, flattenLeafHints(v, p));
+    } else {
+      out[p] = true;
+    }
+  }
+  return out;
+}
+
+function guessTypeForLeaf(leaf) {
+  if (/^(is|has|can|discoverable|visible|enabled|active)/i.test(leaf)) return 'boolean';
+  if (/count|order|index|height|width|size|duration/i.test(leaf)) return 'number';
+  if (/^(icon|card|cover|liveStream|defaultChannel|subscriptionPlans)$/i.test(leaf)) return 'object';
+  return 'string';
 }
 
 function splitPath(path) {
@@ -425,7 +603,8 @@ export function placeholderFor(path, typeHint) {
   const leaf = String(path).split('.').pop() || '';
   if (/^(is|has|can|discoverable|visible|enabled|active)/i.test(leaf)) return true;
   if (/count|order|index|height|width|size|duration/i.test(leaf)) return 0;
-  if (/path|url|src/i.test(leaf)) return '[prior path]';
+  // Exact leaf names only — do not match `urlname`.
+  if (/^(path|url|src|uri|href)$/i.test(leaf)) return '[prior path]';
   // Explicit prior-value marker — never a mid-string ellipsis.
   return '[prior]';
 }

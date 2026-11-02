@@ -16,6 +16,7 @@ import {
   formatBeforeAfterField,
   jsonValueToFields,
   placeholderFor,
+  remainingByParentFromPaths,
   sanitizeSample,
   splitTextPreserveLines,
 } from '../../tools/fp-notify/lib/before-after.mjs';
@@ -150,8 +151,82 @@ describe('shape payload human copy + before/after', () => {
     const ba = buildBeforeAfter(by['content-post']);
     assert.equal(ba.source, 'illustrative');
     assert.equal(ba.before?.creator?.discoverable, true);
+    // Without remaining sibling hints, empty parents are pruned (not `"creator": {}`).
+    assert.equal('discoverable' in (ba.after?.creator || {}), false);
+    if (ba.after?.creator) {
+      assert.ok(Object.keys(ba.after.creator).length > 0);
+    }
+  });
+
+  it('illustrative After retains remaining creator keys when nested fields are removed', () => {
+    const remaining = remainingByParentFromPaths(
+      [
+        'creator.card',
+        'creator.discoverable',
+        'creator.owner',
+        'creator.visibility',
+      ],
+      [
+        'creator.id',
+        'creator.title',
+        'creator.urlname',
+        'creator.description',
+        'creator.about',
+        'creator.icon',
+        'creator.icon.path',
+      ],
+    );
+    assert.deepEqual(remaining.creator.sort(), [
+      'about',
+      'description',
+      'icon',
+      'id',
+      'title',
+      'urlname',
+    ]);
+
+    const ba = buildBeforeAfter({
+      hasDrift: true,
+      added: [],
+      removed: [
+        'creator.card',
+        'creator.category',
+        'creator.cover',
+        'creator.defaultChannel',
+        'creator.discoverable',
+        'creator.incomeDisplay',
+        'creator.liveStream',
+        'creator.owner',
+        'creator.subscriberCountDisplay',
+        'creator.subscriptionPlans',
+        'creator.visibility',
+      ],
+      typeChanged: [],
+      typeHints: { 'creator.discoverable': 'boolean', 'creator.owner': 'string' },
+      remainingByParent: remaining,
+      remainingTypeHints: {
+        'creator.id': 'string',
+        'creator.title': 'string',
+        'creator.urlname': 'string',
+        'creator.description': 'string',
+        'creator.about': 'string',
+        'creator.icon': 'object',
+      },
+    });
+    assert.equal(ba.source, 'illustrative');
+    assert.equal(ba.before?.creator?.discoverable, true);
+    assert.equal(ba.before?.creator?.title, '[prior]');
     assert.ok(ba.after?.creator);
-    assert.equal('discoverable' in (ba.after.creator || {}), false);
+    assert.equal('discoverable' in ba.after.creator, false);
+    assert.equal('owner' in ba.after.creator, false);
+    assert.equal('card' in ba.after.creator, false);
+    assert.equal(ba.after.creator.title, '[prior]');
+    assert.equal(ba.after.creator.id, '[prior]');
+    assert.equal(ba.after.creator.urlname, '[prior]');
+    assert.equal(ba.after.creator.description, '[prior]');
+    assert.equal(ba.after.creator.about, '[prior]');
+    assert.ok('icon' in ba.after.creator);
+    assert.notDeepEqual(ba.after.creator, {});
   });
 
   it('prefers sanitized capture samples when present', () => {
