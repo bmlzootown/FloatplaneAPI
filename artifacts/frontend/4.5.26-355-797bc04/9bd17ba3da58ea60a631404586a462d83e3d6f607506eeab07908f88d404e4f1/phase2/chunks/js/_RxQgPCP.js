@@ -1,0 +1,1 @@
+import{n as e}from"./aWszMqew.js";import{z as t}from"./index-Dxy9c0et.js";var n=e(),r=t((0,n.jsx)(`path`,{d:`m7 14 5-5 5 5z`}),`ArrowDropUp`);export{r as t};

@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "orchestratorId": "phase2.3-frontend-evidence-orchestrate",
+  "orchestratorVersion": "2.3.1",
+  "observationId": "8cb81ec3d78e7025ca3787339bbc744b0d42e4daf8a94cbba40e934cf3cb8963",
+  "buildId": "4.5.25-340-92712da",
+  "previousObservationId": "f71e83fd15643cf82c9cb6a0cf17089067a7d8a689022ae3b4a261a649f5bf8b",
+  "existence": "exists",
+  "extract": {
+    "status": "complete",
+    "closureStatus": "complete_with_external_rejects",
+    "extractedAt": "2026-10-07T00:31:14.734Z",
+    "error": null,
+    "refuseRemoval": false
+  },
+  "comparison": {
+    "status": "complete",
+    "fromObservationId": "f71e83fd15643cf82c9cb6a0cf17089067a7d8a689022ae3b4a261a649f5bf8b",
+    "comparisonStatus": "complete",
+    "diffRelPath": "phase2/diffs/f71e83fd15643cf82c9cb6a0cf17089067a7d8a689022ae3b4a261a649f5bf8b",
+    "comparedAt": "2026-10-07T00:31:14.734Z",
+    "error": null,
+    "summaryCounts": {
+      "structured_operation_added": 0,
+      "structured_operation_disappeared": 350,
+      "method_set_changed": 0,
+      "request_construction_changed": 0,
+      "auth_evidence_changed": 14,
+      "response_mapper_changed": 0,
+      "realtime_evidence_changed": 0,
+      "weak_reference_added": 0,
+      "weak_reference_disappeared": 0,
+      "provenance_moved": 27,
+      "byCategory": {
+        "structured_operation_added": 0,
+        "structured_operation_disappeared": 350,
+        "method_set_changed": 0,
+        "request_construction_changed": 0,
+        "auth_evidence_changed": 14,
+        "response_mapper_changed": 0,
+        "realtime_evidence_changed": 0,
+        "weak_reference_added": 0,
+        "weak_reference_disappeared": 0,
+        "provenance_moved": 27
+      },
+      "atomic": {
+        "structured_operation_added": 0,
+        "structured_operation_disappeared": 350,
+        "method_set_changed": 0,
+        "request_construction_changed": 0,
+        "auth_evidence_changed": 14,
+        "response_mapper_changed": 0,
+        "realtime_evidence_changed": 0,
+        "weak_reference_added": 0,
+        "weak_reference_disappeared": 0,
+        "provenance_moved": 27
+      },
+      "derived": {
+        "structured_operation_added": 0,
+        "structured_operation_disappeared": 0,
+        "method_set_changed": 0,
+        "request_construction_changed": 0,
+        "auth_evidence_changed": 0,
+        "response_mapper_changed": 0,
+        "realtime_evidence_changed": 0,
+        "weak_reference_added": 0,
+        "weak_reference_disappeared": 0,
+        "provenance_moved": 0
+      },
+      "totalAtomic": 391,
+      "totalDerived": 0,
+      "total": 391,
+      "suppressedTotal": 0,
+      "suppressedByCategory": {},
+      "note": "method_set_changed is derived/grouped over atomic structured_operation add/disappear on the same path. Reviewers should not treat derived + atomic as independent API changes. Suppressed conclusions are excluded from totals and listed in suppressedChanges."
+    }
+  },
+  "updatedAt": "2026-10-07T00:31:14.734Z"
+}

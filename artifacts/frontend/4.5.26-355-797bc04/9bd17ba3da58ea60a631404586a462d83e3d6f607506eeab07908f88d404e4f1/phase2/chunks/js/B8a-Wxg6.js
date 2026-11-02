@@ -1,0 +1,1 @@
+import{t as e}from"./aWszMqew.js";function t(t){if(!e.cdn)return t;let n=e.cdn;return n.endsWith(`/`)||(n+=`/`),t.startsWith(`/`)&&(t=t.slice(1)),n+t}export{t};

@@ -1,0 +1,1 @@
+import{f as a}from"./CbpbNORz.js";import{x as o}from"./index-DaEmRTqt.js";const r=o.createContext(void 0);function s(){const t=o.useContext(r);if(t===void 0)throw new Error(a(64));return t}const e="data-activation-direction",c={tabActivationDirection:t=>({[e]:t})};export{r as T,c as t,s as u};

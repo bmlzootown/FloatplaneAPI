@@ -1,0 +1,40 @@
+{
+    "name": "Floatplane",
+    "short_name": "Floatplane",
+    "display": "standalone",
+    "theme_color": "#1f2e3e",
+    "background_color": "#082334",
+    "gcm_sender_id": "103953800507",
+    "icons": [
+        {
+            "src": "/favicons/32x32.png",
+            "sizes": "32x32",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/favicons/48x48.png",
+            "sizes": "48x48",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/favicons/96x96.png",
+            "sizes": "96x96",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/favicons/128x128.png",
+            "sizes": "128x128",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/favicons/196x196.png",
+            "sizes": "196x196",
+            "type": "image/png",
+            "purpose": "any"
+        }
+    ]
+}

@@ -1,0 +1,1 @@
+import{m as e,n as t}from"./aWszMqew.js";import{t as n}from"./Ur9B-DzM.js";e();var r=t();function i(e){let{image:t,sizeMode:i,sizeTargetWidth:a,sizeTargetHeight:o,...s}=e,c=n.useUrl(t,i,a,o);return(0,r.jsx)(`img`,{...s,src:c})}export{i as t};

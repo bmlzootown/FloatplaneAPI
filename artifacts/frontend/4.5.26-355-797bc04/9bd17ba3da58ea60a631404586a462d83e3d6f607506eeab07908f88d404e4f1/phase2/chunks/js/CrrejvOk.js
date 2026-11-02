@@ -1,0 +1,1 @@
+var e;(function(e){e.PAGE_SIZE=20;let t=e.TARGET_WIDTH=400;function n(e){return e<=600?1:Math.ceil(e/t)}e.getFeedItemsX=n})(e||={});export{e as t};

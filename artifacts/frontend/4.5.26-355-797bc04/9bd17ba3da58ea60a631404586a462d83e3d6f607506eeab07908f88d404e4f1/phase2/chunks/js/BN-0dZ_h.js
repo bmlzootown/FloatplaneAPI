@@ -1,0 +1,1 @@
+import{m as e,n as t}from"./aWszMqew.js";import{_ as n,n as r,r as i}from"./B2UiXWpX.js";import{t as a}from"./K__XfjW1.js";import{t as o}from"./Cmfx9ivZ.js";e();var s=t(),c=n(()=>r(`Originals`)((0,s.jsx)(i,{children:(0,s.jsx)(a,{pageTitle:`Originals`,filterCategories:o})})));export{c as default};

@@ -1,0 +1,1 @@
+import{j as m}from"./index-DaEmRTqt.js";import{c as o}from"./B1nANJPC.js";const p="_feedEmptyMessage_1sgwp_1",r={feedEmptyMessage:p};function d(s){const{children:e,className:t,...a}=s;return m.jsx("div",{...a,className:o(t,r.feedEmptyMessage),children:e})}export{d as F};

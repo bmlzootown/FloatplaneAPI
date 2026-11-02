@@ -1,0 +1,1 @@
+var e=`small`;export{e as t};

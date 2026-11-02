@@ -1,0 +1,1 @@
+import{R as e}from"./index-DaEmRTqt.js";import{b as s}from"./TFAGz_pq.js";const r=Object.freeze({focusedKey:null,get isUnfocused(){return!0},isFocusWithin(){return!1},setFocus(){},moveFocus(){},handleEnterPress(){},handleBackPress(){return!1},focusParentGroup(){}}),u=()=>e.useContext(s)?.focusManager||r;export{u};

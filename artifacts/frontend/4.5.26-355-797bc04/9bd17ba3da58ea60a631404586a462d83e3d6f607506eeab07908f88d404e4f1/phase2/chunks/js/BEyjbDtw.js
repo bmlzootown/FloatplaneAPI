@@ -1,0 +1,1 @@
+import{m as e,n as t}from"./aWszMqew.js";e();var n=t();function r(e){let t={};return e.width!==void 0&&(t.width=e.width),e.height!==void 0&&(t.height=e.height),e.flex!==void 0&&(t.flex=e.flex),e.basis!==void 0&&(t.flexBasis=e.basis),e.grow!==void 0&&(t.flexGrow=e.grow),e.shrink!==void 0&&(t.flexShrink=e.shrink),(0,n.jsx)(`div`,{style:t})}export{r as t};

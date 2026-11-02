@@ -1,0 +1,1 @@
+import{n as e}from"./aWszMqew.js";import{g as t}from"./B2UiXWpX.js";var n=e(),r=t(()=>(0,n.jsxs)(`div`,{children:[(0,n.jsx)(`h1`,{children:`Offboarding Page`}),(0,n.jsx)(`p`,{children:`This page is under construction. Please check back later.`})]}));export{r as default};

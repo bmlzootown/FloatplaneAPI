@@ -1,0 +1,1 @@
+import{x as u}from"./index-DaEmRTqt.js";import{u as r}from"./dRWMeZvD.js";import{a}from"./DVL5tNi9.js";function i(o,e){const s=r(),t=a(()=>s.isUnfocused);u.useEffect(()=>{t&&s.setFocus(o,e)})}export{i as u};

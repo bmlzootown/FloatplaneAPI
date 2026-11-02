@@ -1,0 +1,1 @@
+import{j as m}from"./index-DaEmRTqt.js";import{I as g}from"./CPkToBcE.js";function u(e){const{image:s,sizeMode:r,sizeTargetWidth:t,sizeTargetHeight:o,...i}=e,a=g.useUrl(s,r,t,o);return m.jsx("img",{...i,src:a})}export{u as F};
