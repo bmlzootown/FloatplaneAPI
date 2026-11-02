@@ -1,0 +1,48 @@
+{
+  "byEndpoint": {
+    "content-creator": {
+      "added": [],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 73,
+      "hasDrift": false
+    },
+    "content-post": {
+      "added": [],
+      "removed": [
+        "creator.card",
+        "creator.category",
+        "creator.cover",
+        "creator.defaultChannel",
+        "creator.discoverable",
+        "creator.incomeDisplay",
+        "creator.liveStream",
+        "creator.owner",
+        "creator.subscriberCountDisplay",
+        "creator.subscriptionPlans",
+        "creator.visibility"
+      ],
+      "typeChanged": [],
+      "unchangedCount": 131,
+      "hasDrift": true
+    },
+    "user-self": {
+      "added": [],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 22,
+      "hasDrift": false
+    },
+    "user-subscriptions": {
+      "added": [
+        "$[].plan.allowPromotionCodes"
+      ],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 26,
+      "hasDrift": true
+    }
+  },
+  "hasDrift": true,
+  "firstCapture": false
+}
