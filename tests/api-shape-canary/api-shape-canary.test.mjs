@@ -18,7 +18,14 @@ import {
   pollDeviceToken,
 } from '../../tools/fp-api-shape-canary/lib/device-flow.mjs';
 import { runCapture, resolveAccessToken } from '../../tools/fp-api-shape-canary/lib/run.mjs';
-import { EXIT, OIDC } from '../../tools/fp-api-shape-canary/lib/constants.mjs';
+import { EXIT, OIDC, PREFERRED_CREATOR } from '../../tools/fp-api-shape-canary/lib/constants.mjs';
+import {
+  orderCreatorIdsPreferPreferred,
+  projectDriftFragment,
+  reconstructBeforeFragment,
+  sanitizeResponseBody,
+} from '../../tools/fp-api-shape-canary/lib/sanitize-sample.mjs';
+import { loadCaptureSample } from '../../tools/fp-api-shape-canary/lib/store.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TMP = path.join(__dirname, '.tmp-api-shape');
@@ -113,6 +120,103 @@ describe('id pickers', () => {
       'v1',
     );
     assert.equal(pickVideoAttachmentId({ videoAttachments: ['v2'] }), 'v2');
+  });
+
+  it('prefers LinusTechTips creator id when subscribed', () => {
+    const ltt = PREFERRED_CREATOR.id;
+    assert.deepEqual(
+      listCreatorIdsFromSubscriptions([{ creator: 'other' }, { creator: ltt }, { creator: 'z' }]),
+      [ltt, 'other', 'z'],
+    );
+    assert.deepEqual(orderCreatorIdsPreferPreferred(['a', ltt, 'b']), [ltt, 'a', 'b']);
+  });
+});
+
+describe('sanitized samples', () => {
+  it('redacts tokens/email and projects drift fragments', () => {
+    const body = {
+      id: 'p1',
+      title: 'Hello',
+      email: 'hide@example.com',
+      accessToken: 'eyJhbGciOiJIUzI1NiJ9.abc.def',
+      creator: { id: PREFERRED_CREATOR.id, title: 'LinusTechTips', discoverable: true },
+      channel: { icon: { childImages: [], height: 64, path: '/x', width: 64 } },
+    };
+    const sanitized = sanitizeResponseBody(body);
+    assert.equal(sanitized.email, '[redacted]');
+    assert.equal(sanitized.accessToken, '[redacted]');
+    assert.equal(sanitized.creator.title, 'LinusTechTips');
+
+    const after = {
+      id: 'p1',
+      title: 'Hello',
+      creator: { id: PREFERRED_CREATOR.id, title: 'LinusTechTips' },
+      channel: { icon: { childImages: [], height: 64, path: '/x', width: 64 } },
+    };
+    const drift = {
+      removed: [
+        'creator.discoverable',
+        'channel.icon.childImages[].height',
+        'channel.icon.childImages[].path',
+        'channel.icon.childImages[].width',
+      ],
+      typeChanged: [{ path: 'channel.icon.childImages[]', from: 'object', to: 'unknown' }],
+      typeHints: {
+        'creator.discoverable': 'boolean',
+        'channel.icon.childImages[].height': 'number',
+        'channel.icon.childImages[].path': 'string',
+        'channel.icon.childImages[].width': 'number',
+      },
+    };
+    const frag = projectDriftFragment(after, drift);
+    assert.equal(frag.id, 'p1');
+    assert.ok(frag.creator);
+    assert.equal('discoverable' in (frag.creator || {}), false);
+
+    const before = reconstructBeforeFragment(after, drift);
+    assert.equal(before.creator.discoverable, true);
+    assert.ok(Array.isArray(before.channel.icon.childImages));
+    assert.equal(typeof before.channel.icon.childImages[0].height, 'number');
+  });
+
+  it('writes sanitized samples beside trees on capture', async () => {
+    const artifactsRoot = path.join(TMP, 'capture-samples');
+    await mkdir(artifactsRoot, { recursive: true });
+    const fetchImpl = async (url) => {
+      const u = String(url);
+      if (u.includes('/user/self')) {
+        return jsonResponse({ id: 'u1', username: 't', email: 'a@b.c' });
+      }
+      if (u.includes('/user/subscriptions')) {
+        return jsonResponse([{ creator: PREFERRED_CREATOR.id, plan: { title: 'LTT' } }]);
+      }
+      if (u.includes('/content/creator')) {
+        return jsonResponse([{ id: 'post-1', title: 't', creator: { id: PREFERRED_CREATOR.id } }]);
+      }
+      if (u.includes('/content/post')) {
+        return jsonResponse({
+          id: 'post-1',
+          title: 't',
+          creator: { id: PREFERRED_CREATOR.id, title: 'LinusTechTips', discoverable: true },
+          channel: { icon: { childImages: [{ height: 1, path: '/p', width: 1 }] } },
+        });
+      }
+      return jsonResponse({ error: 'unexpected' }, 500);
+    };
+    const result = await runCapture({
+      artifactsRoot,
+      accessToken: 'test-token',
+      fetchImpl,
+      now: new Date('2026-10-26T12:00:00.000Z'),
+      promoteBaselines: true,
+    });
+    assert.ok(result.dir);
+    assert.ok(result.samples?.['content-post']);
+    assert.equal(result.samples['content-post'].creator.email, undefined);
+    assert.equal(result.samples['user-self'].email, '[redacted]');
+    const loaded = await loadCaptureSample(result.dir, 'content-post');
+    assert.equal(loaded.creator.title, 'LinusTechTips');
+    assert.equal(result.meta.preferredCreator.used, true);
   });
 });
 

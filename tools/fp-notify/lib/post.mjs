@@ -25,19 +25,16 @@ export async function postWebhook(opts) {
 
   const body = JSON.stringify(opts.payload);
   if (body.length > MAX_PAYLOAD_CHARS) {
-    // Last-resort shrink: drop to a single short embed
-    const shrunk = {
-      username: opts.payload.username,
-      embeds: [
-        {
-          title: opts.payload.embeds?.[0]?.title || 'FloatplaneAPI Watch',
-          description: `${(opts.payload.embeds?.[0]?.description || '').slice(0, 500)}\n_(payload truncated)_`,
-          color: opts.payload.embeds?.[0]?.color,
-          timestamp: new Date().toISOString(),
-        },
-      ],
+    // Do not silently replace sample JSON with a stub. Caller should pack /
+    // split via packShapePayloads; refuse oversized single posts explicitly.
+    return {
+      ok: false,
+      skipped: false,
+      reason: 'payload-too-large',
+      error: `payload ${body.length} chars exceeds soft cap ${MAX_PAYLOAD_CHARS} — split samples into continued fields/messages`,
+      bytes: body.length,
+      webhook: redactWebhookUrl(opts.url),
     };
-    return postWebhook({ ...opts, payload: shrunk });
   }
 
   if (opts.dryRun) {

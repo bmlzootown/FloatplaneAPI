@@ -45,10 +45,10 @@ Scheduled Automation prompt: `automation/PROMPT.md` (coordinator attaches timer;
 suggested cron `0 3 * * 1`). See that prompt for this Project’s concrete
 `FP_API_SHAPE_AUTH_STORE` secrets path.
 
-**Fluxer alerts (optional):** on `open_shape_pr` / `update_shape_pr`, Automation
-calls `tools/fp-notify` after the PR URL is known. Seed
-`FLUXER_WEBHOOK_URL` or Project `secrets/fluxer-webhook.url` (never commit).
-See `tools/fp-notify/README.md`.
+**Fluxer + Discord alerts (optional):** on `open_shape_pr` / `update_shape_pr`,
+Automation calls `tools/fp-notify` after the PR URL is known (live → both webhooks;
+`--test` → Fluxer only). Seed `FLUXER_WEBHOOK_URL` / `DISCORD_WEBHOOK_URL` or
+Project `secrets/{fluxer,discord}-webhook.url` (never commit). See `tools/fp-notify/README.md`.
 
 ## Allowlist (read-only)
 
@@ -70,12 +70,16 @@ artifacts/api-shape/
   baselines/{endpointId}.schema.json   # durable field-tree baselines (commit when reviewable)
   captures/{captureId}/
     meta.json                          # calls, notes, oidc evidence refs (no tokens)
-    trees/{endpointId}.schema.json     # observed field trees (no response bodies)
+    trees/{endpointId}.schema.json     # observed field trees (structure only)
+    samples/{endpointId}.sanitized.json # carefully redacted live bodies (Fluxer before/after)
     diff.json
     report.md
 ```
 
-Field trees store **keys + JSON types + nullability only** — not titles, text, or PII.
+Field trees store **keys + JSON types + nullability only** — structural source of truth.
+Sanitized samples retain a redacted live body (no tokens/PII) so Fluxer alerts can show
+**live before/after** instead of illustrative fragments. Prefer **LinusTechTips** when
+the account is subscribed. Never commit `raw/` unredacted dumps.
 
 ## Commands
 

@@ -10,6 +10,7 @@ import {
   EXIT,
   OIDC,
   OIDC_EVIDENCE,
+  PREFERRED_CREATOR,
   SCHEMA_VERSION,
   TOOL_ID,
   TOOL_VERSION,
@@ -33,6 +34,10 @@ import {
   pickVideoAttachmentId,
   redactToken,
 } from './probe.mjs';
+import {
+  bodyLooksLikePreferredCreator,
+  sanitizeResponseBody,
+} from './sanitize-sample.mjs';
 import { loadBaselines, makeCaptureId, writeCapture } from './store.mjs';
 
 /**
@@ -422,6 +427,8 @@ export async function runCapture(opts) {
   const captureId = makeCaptureId(now);
   /** @type {Record<string, object>} */
   const trees = {};
+  /** @type {Record<string, unknown>} */
+  const samples = {};
   /** @type {object[]} */
   const calls = [];
   /** @type {string[]} */
@@ -433,6 +440,14 @@ export async function runCapture(opts) {
   let creatorId = opts.creatorId || null;
   let postId = opts.postId || null;
   let videoId = null;
+  let preferredCreatorUsed = false;
+
+  /** @param {string} id @param {unknown} json */
+  function recordBody(id, json) {
+    if (json == null) return;
+    trees[id] = buildFieldTree(json);
+    samples[id] = sanitizeResponseBody(json);
+  }
 
   /** @param {Parameters<typeof apiGetJson>[0]} partial */
   async function getJson(partial) {
@@ -461,7 +476,7 @@ export async function runCapture(opts) {
       auth: 'none',
     });
     if (result.ok && result.json != null) {
-      trees[UNAUTH_LIST.id] = buildFieldTree(result.json);
+      recordBody(UNAUTH_LIST.id, result.json);
       if (!postId) postId = pickPostIdFromCreatorList(result.json);
     } else {
       errors.push(`unauth list HTTP ${result.status}`);
@@ -506,11 +521,11 @@ export async function runCapture(opts) {
         ok: result.ok,
         auth: result.authScheme,
       });
-      if (result.ok && result.json != null) trees[ep.id] = buildFieldTree(result.json);
+      if (result.ok && result.json != null) recordBody(ep.id, result.json);
       else errors.push(`user-self HTTP ${result.status}`);
     }
 
-    // 2) subscriptions → creator id(s)
+    // 2) subscriptions → creator id(s) (LinusTechTips preferred when subscribed)
     /** @type {string[]} */
     let creatorIds = [];
     {
@@ -525,10 +540,23 @@ export async function runCapture(opts) {
         auth: result.authScheme,
       });
       if (result.ok && result.json != null) {
-        trees[ep.id] = buildFieldTree(result.json);
+        recordBody(ep.id, result.json);
         creatorIds = listCreatorIdsFromSubscriptions(result.json);
         if (creatorId && !creatorIds.includes(creatorId)) creatorIds.unshift(creatorId);
         if (!creatorId) creatorId = creatorIds[0] || null;
+        if (creatorIds[0] === PREFERRED_CREATOR.id) {
+          notes.push(
+            `Preferring ${PREFERRED_CREATOR.label} (${PREFERRED_CREATOR.id}) for content samples`,
+          );
+        } else if (creatorIds.includes(PREFERRED_CREATOR.id)) {
+          notes.push(
+            `${PREFERRED_CREATOR.label} subscribed but not first after ordering — check picker`,
+          );
+        } else {
+          notes.push(
+            `${PREFERRED_CREATOR.label} not in subscriptions; using first subscribed creator for samples`,
+          );
+        }
       } else {
         errors.push(`user-subscriptions HTTP ${result.status}`);
       }
@@ -555,12 +583,14 @@ export async function runCapture(opts) {
           auth: result.authScheme,
           query: { id: '(redacted)', limit: 1 },
           creatorAttempt: candidate === creatorIds[0] ? 'first' : 'fallback',
+          preferredCreator: candidate === PREFERRED_CREATOR.id,
         });
         if (result.ok && result.json != null) {
-          trees[ep.id] = buildFieldTree(result.json);
+          recordBody(ep.id, result.json);
           const found = pickPostIdFromCreatorList(result.json);
           if (found) {
             creatorId = candidate;
+            preferredCreatorUsed = candidate === PREFERRED_CREATOR.id;
             if (!postId) postId = found;
             break;
           }
@@ -587,10 +617,15 @@ export async function runCapture(opts) {
         ok: result.ok,
         auth: result.authScheme,
         query: { id: '(redacted)' },
+        preferredCreator: preferredCreatorUsed,
       });
       if (result.ok && result.json != null) {
-        trees[ep.id] = buildFieldTree(result.json);
+        recordBody(ep.id, result.json);
         videoId = pickVideoAttachmentId(result.json);
+        if (bodyLooksLikePreferredCreator(result.json)) {
+          preferredCreatorUsed = true;
+          notes.push(`content-post sample is ${PREFERRED_CREATOR.label}`);
+        }
       } else {
         errors.push(`content-post HTTP ${result.status}`);
       }
@@ -612,7 +647,7 @@ export async function runCapture(opts) {
         query: { id: '(redacted)' },
         optional: true,
       });
-      if (result.ok && result.json != null) trees[ep.id] = buildFieldTree(result.json);
+      if (result.ok && result.json != null) recordBody(ep.id, result.json);
       else notes.push(`optional content-video HTTP ${result.status}`);
     } else if (opts.includeOptionalVideo) {
       notes.push('optional content-video skipped (no video attachment id)');
@@ -696,7 +731,13 @@ export async function runCapture(opts) {
       postId: Boolean(postId),
       videoId: Boolean(videoId),
     },
+    preferredCreator: {
+      id: PREFERRED_CREATOR.id,
+      label: PREFERRED_CREATOR.label,
+      used: preferredCreatorUsed,
+    },
     endpointIds: Object.keys(trees).sort(),
+    sampleEndpointIds: Object.keys(samples).sort(),
     promoteBaselines: Boolean(opts.promoteBaselines),
   };
 
@@ -705,6 +746,7 @@ export async function runCapture(opts) {
       exitCode: errors.length ? EXIT.FAILURE : EXIT.SUCCESS,
       captureId,
       trees,
+      samples,
       calls,
       notes,
       errors,
@@ -720,6 +762,7 @@ export async function runCapture(opts) {
       exitCode: errors.length ? EXIT.FAILURE : EXIT.NEEDS_AUTH,
       captureId,
       trees,
+      samples,
       calls,
       notes,
       errors,
@@ -740,12 +783,18 @@ export async function runCapture(opts) {
     captureId,
     meta,
     trees,
+    samples,
     diff,
     reportMd,
     promoteBaselines: promote,
   });
 
   if (promote) notes.push(`Baselines promoted under baselines/ from ${captureId}`);
+  if (Object.keys(samples).length) {
+    notes.push(
+      `Sanitized response samples written under samples/ (${Object.keys(samples).sort().join(', ')})`,
+    );
+  }
 
   let exitCode = EXIT.SUCCESS;
   if (errors.length) exitCode = EXIT.FAILURE;
@@ -755,6 +804,7 @@ export async function runCapture(opts) {
     exitCode,
     captureId,
     trees,
+    samples,
     calls,
     notes,
     errors,

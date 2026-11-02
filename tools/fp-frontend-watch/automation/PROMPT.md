@@ -76,7 +76,8 @@ Push normally (fast-forward only). **Never force-push** observation or evidence 
   ```sh
   node tools/fp-notify/cli.mjs notify --decision-file /tmp/frontend-decision.json --pr-url "$PR_URL"
   ```
-  Do **not** notify on `noop`. Never log `FLUXER_WEBHOOK_URL` or `secrets/fluxer-webhook.url`.
+  Default live notify → Fluxer + Discord. Format/smoke: add `--test` (Fluxer only).
+  Do **not** notify on `noop`. Never log webhook URLs or `secrets/{fluxer,discord}-webhook.url`.
 
 ### Phase 2 backlog while live unchanged
 
