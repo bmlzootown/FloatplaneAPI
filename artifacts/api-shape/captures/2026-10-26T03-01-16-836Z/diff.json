@@ -1,0 +1,55 @@
+{
+  "byEndpoint": {
+    "content-creator": {
+      "added": [],
+      "removed": [
+        "$[].channel.icon.childImages[].height",
+        "$[].channel.icon.childImages[].path",
+        "$[].channel.icon.childImages[].width"
+      ],
+      "typeChanged": [
+        {
+          "path": "$[].channel.icon.childImages[]",
+          "from": "object",
+          "to": "unknown"
+        }
+      ],
+      "unchangedCount": 69,
+      "hasDrift": true
+    },
+    "content-post": {
+      "added": [],
+      "removed": [
+        "channel.icon.childImages[].height",
+        "channel.icon.childImages[].path",
+        "channel.icon.childImages[].width",
+        "creator.discoverable"
+      ],
+      "typeChanged": [
+        {
+          "path": "channel.icon.childImages[]",
+          "from": "object",
+          "to": "unknown"
+        }
+      ],
+      "unchangedCount": 137,
+      "hasDrift": true
+    },
+    "user-self": {
+      "added": [],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 22,
+      "hasDrift": false
+    },
+    "user-subscriptions": {
+      "added": [],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 26,
+      "hasDrift": false
+    }
+  },
+  "hasDrift": true,
+  "firstCapture": false
+}
