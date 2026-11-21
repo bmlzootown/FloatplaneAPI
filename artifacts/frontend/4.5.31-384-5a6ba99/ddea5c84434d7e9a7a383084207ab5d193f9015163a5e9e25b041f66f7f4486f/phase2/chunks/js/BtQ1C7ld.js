@@ -1,0 +1,1 @@
+import{c as e,n as t}from"./bgSgC5OP.js";var n=e(t(),1);function r(){let[,e]=n.useState({});return n.useCallback(()=>{e({})},[])}export{r as t};

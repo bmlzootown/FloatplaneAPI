@@ -1,0 +1,1 @@
+import{c as e,n as t}from"./bgSgC5OP.js";import{it as n}from"./BXAex6Hx.js";var r=e(t(),1),i=r.createContext(void 0);function a(){let e=r.useContext(i);if(e===void 0)throw Error(n(64));return e}var o=`data-activation-direction`,s={tabActivationDirection:e=>({[o]:e})};export{i as n,a as r,s as t};

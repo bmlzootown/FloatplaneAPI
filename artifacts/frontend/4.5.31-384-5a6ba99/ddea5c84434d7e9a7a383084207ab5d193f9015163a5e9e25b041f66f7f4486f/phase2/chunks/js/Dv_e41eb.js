@@ -1,0 +1,1 @@
+import{t as e}from"./bgSgC5OP.js";import{l as t}from"./C8LuteEe.js";import{v as n}from"./CH9bDsi3.js";var r=e(),i=(e=>n(t(e)))(()=>(0,r.jsx)(`div`,{children:(0,r.jsx)(`h1`,{children:`Moderator List Page`})}));export{i as default};

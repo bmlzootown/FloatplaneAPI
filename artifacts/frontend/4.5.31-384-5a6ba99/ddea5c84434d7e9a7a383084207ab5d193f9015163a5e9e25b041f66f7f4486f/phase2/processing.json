@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "orchestratorId": "phase2.3-frontend-evidence-orchestrate",
+  "orchestratorVersion": "2.3.1",
+  "observationId": "ddea5c84434d7e9a7a383084207ab5d193f9015163a5e9e25b041f66f7f4486f",
+  "buildId": "4.5.31-384-5a6ba99",
+  "previousObservationId": "9bd17ba3da58ea60a631404586a462d83e3d6f607506eeab07908f88d404e4f1",
+  "existence": "exists",
+  "extract": {
+    "status": "complete",
+    "closureStatus": "complete_with_external_rejects",
+    "extractedAt": "2026-11-21T20:23:34.801Z",
+    "error": null,
+    "refuseRemoval": false
+  },
+  "comparison": {
+    "status": "complete",
+    "fromObservationId": "9bd17ba3da58ea60a631404586a462d83e3d6f607506eeab07908f88d404e4f1",
+    "comparisonStatus": "complete",
+    "diffRelPath": "phase2/diffs/9bd17ba3da58ea60a631404586a462d83e3d6f607506eeab07908f88d404e4f1",
+    "comparedAt": "2026-11-21T20:23:34.801Z",
+    "error": null,
+    "summaryCounts": {
+      "structured_operation_added": 0,
+      "structured_operation_disappeared": 0,
+      "method_set_changed": 0,
+      "request_construction_changed": 0,
+      "auth_evidence_changed": 4,
+      "response_mapper_changed": 0,
+      "realtime_evidence_changed": 1,
+      "weak_reference_added": 13,
+      "weak_reference_disappeared": 100,
+      "provenance_moved": 278,
+      "byCategory": {
+        "structured_operation_added": 0,
+        "structured_operation_disappeared": 0,
+        "method_set_changed": 0,
+        "request_construction_changed": 0,
+        "auth_evidence_changed": 4,
+        "response_mapper_changed": 0,
+        "realtime_evidence_changed": 1,
+        "weak_reference_added": 13,
+        "weak_reference_disappeared": 100,
+        "provenance_moved": 278
+      },
+      "atomic": {
+        "structured_operation_added": 0,
+        "structured_operation_disappeared": 0,
+        "method_set_changed": 0,
+        "request_construction_changed": 0,
+        "auth_evidence_changed": 4,
+        "response_mapper_changed": 0,
+        "realtime_evidence_changed": 1,
+        "weak_reference_added": 13,
+        "weak_reference_disappeared": 100,
+        "provenance_moved": 278
+      },
+      "derived": {
+        "structured_operation_added": 0,
+        "structured_operation_disappeared": 0,
+        "method_set_changed": 0,
+        "request_construction_changed": 0,
+        "auth_evidence_changed": 0,
+        "response_mapper_changed": 0,
+        "realtime_evidence_changed": 0,
+        "weak_reference_added": 0,
+        "weak_reference_disappeared": 0,
+        "provenance_moved": 0
+      },
+      "totalAtomic": 396,
+      "totalDerived": 0,
+      "total": 396,
+      "suppressedTotal": 0,
+      "suppressedByCategory": {},
+      "note": "method_set_changed is derived/grouped over atomic structured_operation add/disappear on the same path. Reviewers should not treat derived + atomic as independent API changes. Suppressed conclusions are excluded from totals and listed in suppressedChanges."
+    }
+  },
+  "updatedAt": "2026-11-21T20:23:34.801Z"
+}
