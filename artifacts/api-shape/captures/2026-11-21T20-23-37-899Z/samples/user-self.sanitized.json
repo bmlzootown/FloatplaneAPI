@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "toolId": "fp-api-shape-canary",
+  "toolVersion": "3.2.0",
+  "endpointId": "user-self",
+  "label": "sanitized-response-sample",
+  "captureId": "2026-11-21T20-23-37-899Z",
+  "warning": "Sanitized live body for alerts/review — not a raw dump. No tokens/PII. Field-tree remains authoritative for drift.",
+  "body": {
+    "id": "5c3014455fb1a5617b77978e",
+    "username": "bmlzootown",
+    "badges": [
+      "6a4438a3dce5344e69e29df6",
+      "6a4423a2949355ad1da36870",
+      "6a85e9ba0b7e9588cb96a73e"
+    ],
+    "profileImage": {
+      "width": 720,
+      "height": 720,
+      "path": "https://pbs.floatplane.com/profile_images/5c3014455fb1a5617b77978e/075400791297026_1602893476892.jpeg",
+      "childImages": [
+        {
+          "width": 100,
+          "height": 100,
+          "path": "https://pbs.floatplane.com/profile_images/5c3014455fb1a5617b77978e/075400791297026_1602893476892_100x100.jpeg"
+        },
+        {
+          "width": 250,
+          "height": 250,
+          "path": "https://pbs.floatplane.com/profile_images/5c3014455fb1a5617b77978e/075400791297026_1602893476892_250x250.jpeg"
+        }
+      ]
+    },
+    "email": "[redacted]",
+    "displayName": "Brandon",
+    "creators": [],
+    "isModerator": true,
+    "isGlobalModerator": false,
+    "moderatorCreators": [
+      "686c49c403ee2657d069c916"
+    ]
+  }
+}

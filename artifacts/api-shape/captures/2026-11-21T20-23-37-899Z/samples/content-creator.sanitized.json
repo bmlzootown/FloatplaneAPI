@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "toolId": "fp-api-shape-canary",
+  "toolVersion": "3.2.0",
+  "endpointId": "content-creator",
+  "label": "sanitized-response-sample",
+  "captureId": "2026-11-21T20-23-37-899Z",
+  "warning": "Sanitized live body for alerts/review — not a raw dump. No tokens/PII. Field-tree remains authoritative for drift.",
+  "body": [
+    {
+      "id": "sMuDNaew3X",
+      "guid": "sMuDNaew3X",
+      "title": "Professional 3D Printing for less - Formlabs Studio 1 Resin Printer",
+      "text": "<p>Formlabs has a new Resin 3D printer and it packs in a ton of high-end features for a lot less than its other models. </p><p><br /></p><p>Check out the printer here - <a href=\"https://formlabs.com/3d-printers/form-studio-1/\">https://formlabs.com/3d-printers/form-studio-1/</a></p><p><br /></p><p>Want us to unbox something? Make a suggestion at <a href=\"https://lmg.gg/7s34e\">https://lmg.gg/7s34e</a></p><p><br /></p><p>Thanks to our channel partner Secretlab!</p><p>- Grab a TITAN Evo ergonomic gaming chair:  <a href=\"https://lmg.gg/titanevosc\">https://lmg.gg/titanevosc</a></p><p>- Grab an ATLAS ergonomic office chair: <a href=\"https://lmg.gg/atlassc\">https://lmg.gg/atlassc</a></p><p>- Grab a MAGNUS Pro sit/stand gaming table:  <a href=\"https://lmg.gg/magnusprosc\">https://lmg.gg/magnusprosc</a></p><p><br /></p><p>► SHOP OUR PRODUCTS: <a href=\"https://lttstore.com\">https://lttstore.com</a></p><p>► GET A VPN: <a href=\"https://www.piavpn.com/ShortCircuit\">https://www.piavpn.com/ShortCircuit</a></p><p>► GET EXCLUSIVE CONTENT ON FLOATPLANE: <a href=\"https://lmg.gg/lttfloatplane\">https://lmg.gg/lttfloatplane</a></p><p>► DIVE DEEPER ON THE LTT LABS WEBSITE: <a href=\"https://lmg.gg/labs\">https://lmg.gg/labs</a></p><p>► SPONSORS, AFFILIATES, AND PARTNERS: <a href=\"https://lmg.gg/partners\">https://lmg.gg/partners</a></p><p><br /></p><p>Purchases made through some store links may provide some compensation to Linus Media Group. Affiliate links powered in part by <a href=\"https://affilimate.com/\">https://affilimate.com/</a></p><p><br /></p><p>Studio lighting by Aputure:</p><p><a href=\"https://aputure.com/\">https://aputure.com/</a></p><p><br /></p><p>Linus Sebastian is an investor in Framework Computer, Inc and HexOS by Eshtek.</p>",
+      "textMarkdown": "Formlabs has a new Resin 3D printer and it packs in a ton of high-end features for a lot less than its other models. \n\n  \nCheck out the printer here - <https://formlabs.com/3d-printers/form-studio-1/>\n\n  \nWant us to unbox something? Make a suggestion at <https://lmg.gg/7s34e>\n\n  \nThanks to our channel partner Secretlab!\n\n\\- Grab a TITAN Evo ergonomic gaming chair: <https://lmg.gg/titanevosc>\n\n\\- Grab an ATLAS ergonomic office chair: <https://lmg.gg/atlassc>\n\n\\- Grab a MAGNUS Pro sit/stand gaming table: <https://lmg.gg/magnusprosc>\n\n  \n► SHOP OUR PRODUCTS: <https://lttstore.com>\n\n► GET A VPN: <https://www.piavpn.com/ShortCircuit>\n\n► GET EXCLUSIVE CONTENT ON FLOATPLANE: <https://lmg.gg/lttfloatplane>\n\n► DIVE DEEPER ON THE LTT LABS WEBSITE: <https://lmg.gg/labs>\n\n► SPONSORS, AFFILIATES, AND PARTNERS: <https://lmg.gg/partners>\n\n  \nPurchases made through some store links may provide some compensation to Linus Media Group. Affiliate links powered in part by <https://affilimate.com/>\n\n  \nStudio lighting by Aputure:\n\n<https://aputure.com/>\n\n  \nLinus Sebastian is an investor in Framework Computer, Inc and HexOS by Eshtek.",
+      "type": "blogPost",
+      "tags": [],
+      "releaseDate": "2026-11-21T18:09:00.025Z",
+      "likes": 13,
+      "dislikes": 0,
+      "score": 13,
+      "comments": 0,
+      "isAccessible": true,
+      "metadata": {
+        "hasVideo": true,
+        "videoCount": 1,
+        "videoDuration": 1011,
+        "hasAudio": false,
+        "audioCount": 0,
+        "audioDuration": 0,
+        "hasPicture": false,
+        "pictureCount": 0,
+        "isFeatured": false,
+        "displayDuration": 1011
+      },
+      "selfUserInteraction": null,
+      "thumbnail": {
+        "width": 1920,
+        "height": 1080,
+        "path": "https://pbs.floatplane.com/video_thumbnails/sMuDNaew3X/703319958080041_1795217356646.jpeg",
+        "childImages": [
+          {
+            "width": 400,
+            "height": 225,
+            "path": "https://pbs.floatplane.com/video_thumbnails/sMuDNaew3X/703319958080041_1795217356646_400x225.jpeg"
+          },
+          {
+            "width": 1920,
+            "height": 1080,
+            "path": "https://pbs.floatplane.com/video_thumbnails/sMuDNaew3X/703319958080041_1795217356646_1920x1080.jpeg"
+          },
+          {
+            "width": 1200,
+            "height": 675,
+            "path": "https://pbs.floatplane.com/video_thumbnails/sMuDNaew3X/703319958080041_1795217356646_1200x675.jpeg"
+          }
+        ]
+      },
+      "creator": {
+        "id": "59f94c0bdd241b70349eb72b",
+        "title": "LinusTechTips",
+        "urlname": "linustechtips",
+        "description": "We make entertaining videos about technology, including tech reviews, showcases, and other content.",
+        "about": "# We're LinusTechTips\nWe make videos and stuff, cool eh?",
+        "icon": {
+          "width": 600,
+          "height": 600,
+          "path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205.jpeg",
+          "childImages": [
+            {
+              "width": 250,
+              "height": 250,
+              "path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205_250x250.jpeg"
+            },
+            {
+              "width": 100,
+              "height": 100,
+              "path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205_100x100.jpeg"
+            }
+          ]
+        },
+        "category": {
+          "id": "59f94c0bdd241b70349eb727",
+          "title": "Technology"
+        },
+        "channels": [
+          "63fe42c309e691e4e36de93d",
+          "65eba4d7788cf21d40c30f57",
+          "64135f82fc76ab7f9fbdc876",
+          "649dbade3540dbc3945eeda7"
+        ]
+      },
+      "channel": {
+        "id": "64135da7ce81077a8480c679",
+        "title": "ShortCircuit",
+        "urlname": "shortcircuit",
+        "about": "What's in the box? Let's find out!\n\nOfficial channel under Linus Media Group.",
+        "icon": {
+          "width": 88,
+          "height": 88,
+          "path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/64135da7ce81077a8480c679/470304051261927_1678990806883.jpeg",
+          "childImages": []
+        }
+      }
+    }
+  ]
+}
