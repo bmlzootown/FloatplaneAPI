@@ -1,28 +1,28 @@
 {
   "schemaVersion": 2,
-  "observationId": "9bd17ba3da58ea60a631404586a462d83e3d6f607506eeab07908f88d404e4f1",
-  "previousObservationId": "8cb81ec3d78e7025ca3787339bbc744b0d42e4daf8a94cbba40e934cf3cb8963",
-  "buildId": "4.5.26-355-797bc04",
+  "observationId": "ddea5c84434d7e9a7a383084207ab5d193f9015163a5e9e25b041f66f7f4486f",
+  "previousObservationId": "9bd17ba3da58ea60a631404586a462d83e3d6f607506eeab07908f88d404e4f1",
+  "buildId": "4.5.31-384-5a6ba99",
   "layout": "vite-user",
-  "baseUrl": "https://frontend.floatplane.com/user/4.5.26-355-797bc04/",
+  "baseUrl": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/",
   "homepageUrl": "https://www.floatplane.com/",
   "discoveryMethod": "homepage-html-asset-urls",
-  "observedAt": "2026-10-26T18:01:06.666Z",
+  "observedAt": "2026-11-21T20:23:34.516Z",
   "artifacts": [
     {
-      "path": "js/index-Dxy9c0et.js",
-      "url": "https://frontend.floatplane.com/user/4.5.26-355-797bc04/js/index-Dxy9c0et.js",
-      "sha256": "7bfb66800fd167af7bd5ae8163ff15b9b428ab5cbb4a7b6855f7f6a3eba62606",
-      "bytes": 1828095,
+      "path": "js/index-CWwE-9kO.js",
+      "url": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/index-CWwE-9kO.js",
+      "sha256": "903ccae145050a2ae4040ea03063a6fd700a98bb276328f7b1ad809a25e0a3ba",
+      "bytes": 245839,
       "contentType": "application/javascript"
     },
     {
       "path": "manifest.floatplane.webmanifest",
-      "url": "https://frontend.floatplane.com/user/4.5.26-355-797bc04/manifest.floatplane.webmanifest",
+      "url": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/manifest.floatplane.webmanifest",
       "sha256": "1e1d685d4e90d1a013ff263615358d9049186525033d4737bb5cdcc4b382b21a",
       "bytes": 996,
       "contentType": "application/manifest+json"
     }
   ],
-  "artifactDir": "artifacts/frontend/4.5.26-355-797bc04/9bd17ba3da58ea60a631404586a462d83e3d6f607506eeab07908f88d404e4f1"
+  "artifactDir": "artifacts/frontend/4.5.31-384-5a6ba99/ddea5c84434d7e9a7a383084207ab5d193f9015163a5e9e25b041f66f7f4486f"
 }

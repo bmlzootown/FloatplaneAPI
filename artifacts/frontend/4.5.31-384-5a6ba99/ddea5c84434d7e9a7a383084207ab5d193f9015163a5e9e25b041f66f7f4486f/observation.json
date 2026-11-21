@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 2,
+  "observationId": "ddea5c84434d7e9a7a383084207ab5d193f9015163a5e9e25b041f66f7f4486f",
+  "previousObservationId": "9bd17ba3da58ea60a631404586a462d83e3d6f607506eeab07908f88d404e4f1",
+  "buildId": "4.5.31-384-5a6ba99",
+  "layout": "vite-user",
+  "baseUrl": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/",
+  "homepageUrl": "https://www.floatplane.com/",
+  "discoveryMethod": "homepage-html-asset-urls",
+  "observedAt": "2026-11-21T20:23:34.516Z",
+  "artifacts": [
+    {
+      "path": "js/index-CWwE-9kO.js",
+      "url": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/index-CWwE-9kO.js",
+      "sha256": "903ccae145050a2ae4040ea03063a6fd700a98bb276328f7b1ad809a25e0a3ba",
+      "bytes": 245839,
+      "contentType": "application/javascript"
+    },
+    {
+      "path": "manifest.floatplane.webmanifest",
+      "url": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/manifest.floatplane.webmanifest",
+      "sha256": "1e1d685d4e90d1a013ff263615358d9049186525033d4737bb5cdcc4b382b21a",
+      "bytes": 996,
+      "contentType": "application/manifest+json"
+    }
+  ],
+  "artifactDir": "artifacts/frontend/4.5.31-384-5a6ba99/ddea5c84434d7e9a7a383084207ab5d193f9015163a5e9e25b041f66f7f4486f",
+  "comparison": {
+    "status": "new_build",
+    "changedArtifacts": [
+      {
+        "path": "js/index-CWwE-9kO.js",
+        "previousSha256": null,
+        "currentSha256": "903ccae145050a2ae4040ea03063a6fd700a98bb276328f7b1ad809a25e0a3ba"
+      },
+      {
+        "path": "manifest.floatplane.webmanifest",
+        "previousSha256": "1e1d685d4e90d1a013ff263615358d9049186525033d4737bb5cdcc4b382b21a",
+        "currentSha256": "1e1d685d4e90d1a013ff263615358d9049186525033d4737bb5cdcc4b382b21a"
+      }
+    ],
+    "removedArtifacts": [
+      "js/index-Dxy9c0et.js"
+    ],
+    "summary": "New frontend build id: 4.5.26-355-797bc04 → 4.5.31-384-5a6ba99"
+  },
+  "evidence": [
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/manifest.floatplane.webmanifest"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/vendor/reflect-metadata.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/index-CWwE-9kO.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/bgSgC5OP.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/CQwnVUCm.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/CfbGZt14.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/DnVq8s8Y.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/CM2eV9Jd.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/BbfpZ9Tg.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/Dz3hTNnP.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/C28j6yuy.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/B2rQdpxZ.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/eXnI0t6i.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/CuQ-eBOf.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/B4hxQIx9.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/Ch7lUJIq.js"
+    },
+    {
+      "kind": "cdn-ref",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/IifkyuKC.js"
+    },
+    {
+      "kind": "script-src",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/vendor/reflect-metadata.js"
+    },
+    {
+      "kind": "module-script-src",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/js/index-CWwE-9kO.js"
+    },
+    {
+      "kind": "manifest-href",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/manifest.floatplane.webmanifest"
+    },
+    {
+      "kind": "manifest-href",
+      "value": "https://frontend.floatplane.com/user/4.5.31-384-5a6ba99/manifest.floatplane.webmanifest"
+    }
+  ],
+  "discoveryHomepageSha256": "f49887c868d4d71ebe6c76921f4dc46f6c1356e634795be70a8b782d273fffe5"
+}
