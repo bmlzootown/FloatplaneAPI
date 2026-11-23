@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "toolId": "fp-api-shape-canary",
+  "toolVersion": "3.2.0",
+  "endpointId": "content-post",
+  "label": "sanitized-response-sample",
+  "captureId": "2026-11-23T03-01-11-225Z",
+  "warning": "Sanitized live body for alerts/review — not a raw dump. No tokens/PII. Field-tree remains authoritative for drift.",
+  "body": {
+    "id": "dvQBLtcldM",
+    "guid": "dvQBLtcldM",
+    "title": "This Phone is Fire - Oukitel WP63",
+    "text": "<p>Sorry for swearing so much. This phone is a trip. I hope you enjoy it lol. - Brad B</p><p><br /></p><p>Want us to unbox something? Make a suggestion at <a href=\"https://lmg.gg/7s34e\">https://lmg.gg/7s34e</a></p><p><br /></p><p>Thanks to our channel partner Secretlab!</p><p>- Grab a TITAN Evo ergonomic gaming chair:  <a href=\"https://lmg.gg/titanevosc\">https://lmg.gg/titanevosc</a></p><p>- Grab an ATLAS ergonomic office chair: <a href=\"https://lmg.gg/atlassc\">https://lmg.gg/atlassc</a></p><p>- Grab a MAGNUS Pro sit/stand gaming table:  <a href=\"https://lmg.gg/magnusprosc\">https://lmg.gg/magnusprosc</a></p><p><br /></p><p>► SHOP OUR PRODUCTS: <a href=\"https://lttstore.com\">https://lttstore.com</a></p><p>► GET A VPN: <a href=\"https://www.piavpn.com/ShortCircuit\">https://www.piavpn.com/ShortCircuit</a></p><p>► GET EXCLUSIVE CONTENT ON FLOATPLANE: <a href=\"https://lmg.gg/lttfloatplane\">https://lmg.gg/lttfloatplane</a></p><p>► DIVE DEEPER ON THE LTT LABS WEBSITE: <a href=\"https://lmg.gg/labs\">https://lmg.gg/labs</a></p><p>► SPONSORS, AFFILIATES, AND PARTNERS: <a href=\"https://lmg.gg/partners\">https://lmg.gg/partners</a></p><p><br /></p><p>Purchases made through some store links may provide some compensation to Linus Media Group. Affiliate links powered in part by <a href=\"https://affilimate.com/\">https://affilimate.com/</a></p><p><br /></p><p>Studio lighting by Aputure:</p><p><a href=\"https://aputure.com/\">https://aputure.com/</a></p><p><br /></p><p>Linus Sebastian is an investor in Framework Computer, Inc and HexOS by Eshtek.</p>",
+    "textMarkdown": "Sorry for swearing so much. This phone is a trip. I hope you enjoy it lol. - Brad B\n\n  \nWant us to unbox something? Make a suggestion at <https://lmg.gg/7s34e>\n\n  \nThanks to our channel partner Secretlab!\n\n\\- Grab a TITAN Evo ergonomic gaming chair: <https://lmg.gg/titanevosc>\n\n\\- Grab an ATLAS ergonomic office chair: <https://lmg.gg/atlassc>\n\n\\- Grab a MAGNUS Pro sit/stand gaming table: <https://lmg.gg/magnusprosc>\n\n  \n► SHOP OUR PRODUCTS: <https://lttstore.com>\n\n► GET A VPN: <https://www.piavpn.com/ShortCircuit>\n\n► GET EXCLUSIVE CONTENT ON FLOATPLANE: <https://lmg.gg/lttfloatplane>\n\n► DIVE DEEPER ON THE LTT LABS WEBSITE: <https://lmg.gg/labs>\n\n► SPONSORS, AFFILIATES, AND PARTNERS: <https://lmg.gg/partners>\n\n  \nPurchases made through some store links may provide some compensation to Linus Media Group. Affiliate links powered in part by <https://affilimate.com/>\n\n  \nStudio lighting by Aputure:\n\n<https://aputure.com/>\n\n  \nLinus Sebastian is an investor in Framework Computer, Inc and HexOS by Eshtek.",
+    "type": "blogPost",
+    "channel": {
+      "id": "64135da7ce81077a8480c679",
+      "creator": "59f94c0bdd241b70349eb72b",
+      "title": "ShortCircuit",
+      "urlname": "shortcircuit",
+      "about": "What's in the box? Let's find out!\n\nOfficial channel under Linus Media Group.",
+      "order": 2,
+      "cover": null,
+      "card": null,
+      "icon": {
+        "width": 88,
+        "height": 88,
+        "path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/64135da7ce81077a8480c679/470304051261927_1678990806883.jpeg",
+        "childImages": []
+      }
+    },
+    "tags": [],
+    "attachmentOrder": [
+      "yYqJUYTvhM"
+    ],
+    "releaseDate": "2026-11-22T17:33:00.032Z",
+    "likes": 47,
+    "dislikes": 2,
+    "score": 45,
+    "comments": 3,
+    "creator": {
+      "id": "59f94c0bdd241b70349eb72b",
+      "title": "LinusTechTips",
+      "urlname": "linustechtips",
+      "description": "We make entertaining videos about technology, including tech reviews, showcases, and other content.",
+      "about": "# We're LinusTechTips\nWe make videos and stuff, cool eh?",
+      "icon": {
+        "width": 600,
+        "height": 600,
+        "path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205.jpeg",
+        "childImages": [
+          {
+            "width": 250,
+            "height": 250,
+            "path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205_250x250.jpeg"
+          },
+          {
+            "width": 100,
+            "height": 100,
+            "path": "https://pbs.floatplane.com/creator_icons/59f94c0bdd241b70349eb72b/770551996990709_1551249357205_100x100.jpeg"
+          }
+        ]
+      }
+    },
+    "wasReleasedSilently": false,
+    "metadata": {
+      "hasVideo": true,
+      "videoCount": 1,
+      "videoDuration": 1129,
+      "hasAudio": false,
+      "audioCount": 0,
+      "audioDuration": 0,
+      "hasPicture": false,
+      "pictureCount": 0,
+      "isFeatured": false,
+      "displayDuration": 1129
+    },
+    "selfUserInteraction": null,
+    "thumbnail": {
+      "width": 400,
+      "height": 225,
+      "path": "https://pbs.floatplane.com/picture_thumbnails/pLJ5DrBHmq/469473054289280_1795221310188.jpeg",
+      "childImages": [
+        {
+          "width": 400,
+          "height": 225,
+          "path": "https://pbs.floatplane.com/picture_thumbnails/pLJ5DrBHmq/469473054289280_1795221310188_400x225.jpeg"
+        }
+      ]
+    },
+    "isAccessible": true,
+    "userInteraction": [],
+    "videoAttachments": [
+      {
+        "id": "yYqJUYTvhM",
+        "guid": "yYqJUYTvhM",
+        "title": "This Phone is Fire - Oukitel WP63",
+        "type": "video",
+        "description": "",
+        "releaseDate": null,
+        "duration": 1129,
+        "creator": "59f94c0bdd241b70349eb72b",
+        "likes": 0,
+        "dislikes": 0,
+        "score": 0,
+        "isProcessing": false,
+        "primaryBlogPost": "dvQBLtcldM",
+        "levels": [
+          {
+            "name": "360",
+            "width": 640,
+            "height": 360,
+            "label": "360p",
+            "order": 0
+          },
+          {
+            "name": "480",
+            "width": 854,
+            "height": 480,
+            "label": "480p",
+            "order": 1
+          },
+          {
+            "name": "720",
+            "width": 1280,
+            "height": 720,
+            "label": "720p",
+            "order": 2
+          },
+          {
+            "name": "1080",
+            "width": 1920,
+            "height": 1080,
+            "label": "1080p",
+            "order": 4
+          }
+        ],
+        "textTracks": [
+          {
+            "id": "6b00e7b5ab5ea178afc5aa19",
+            "src": "https://941d59f1900d0a09025413971374845d.r2.cloudflarestorage.com/prod-texttrack/text_tracks/yYqJUYTvhM/248251152503483_1795222904887.vtt?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=848bccaff51d5141475de2d2a180f979%2F20261123%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20261123T030111Z&X-Amz-Expires=900&X-Amz-Signature=3d429e6076a6254e267df3c06fbd3ea1b8745ef8c5cabc2a705982d4eb28c99d&X-Amz-SignedHeaders=host&response-expires=Mon%2C%2023%20Nov%202026%2003%3A16%3A11%20GMT&x-amz-checksum-mode=ENABLED&x-id=GetObject",
+            "kind": "captions",
+            "language": "en",
+            "generated": true,
+            "processing": false
+          }
+        ],
+        "selfUserInteraction": null,
+        "thumbnail": {
+          "width": 1920,
+          "height": 1080,
+          "path": "https://pbs.floatplane.com/content_thumbnails/yYqJUYTvhM/849194070412267_1795221492246.jpeg",
+          "childImages": [
+            {
+              "width": 400,
+              "height": 225,
+              "path": "https://pbs.floatplane.com/content_thumbnails/yYqJUYTvhM/849194070412267_1795221492246_400x225.jpeg"
+            },
+            {
+              "width": 1200,
+              "height": 675,
+              "path": "https://pbs.floatplane.com/content_thumbnails/yYqJUYTvhM/849194070412267_1795221492246_1200x675.jpeg"
+            },
+            {
+              "width": 1920,
+              "height": 1080,
+              "path": "https://pbs.floatplane.com/content_thumbnails/yYqJUYTvhM/849194070412267_1795221492246_1920x1080.jpeg"
+            }
+          ]
+        },
+        "isAccessible": true,
+        "blogPosts": [
+          "dvQBLtcldM"
+        ],
+        "timelineSprite": {
+          "width": 18080,
+          "height": 450,
+          "path": "https://pbs.floatplane.com/timeline_sprite/yYqJUYTvhM/349252172553580_1795222216239.jpeg",
+          "childImages": []
+        }
+      }
+    ],
+    "audioAttachments": [],
+    "pictureAttachments": []
+  }
+}
