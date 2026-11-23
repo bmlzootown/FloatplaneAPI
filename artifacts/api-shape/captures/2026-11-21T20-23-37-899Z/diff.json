@@ -1,0 +1,75 @@
+{
+  "byEndpoint": {
+    "content-creator": {
+      "added": [],
+      "removed": [
+        "$[].channel.icon.childImages[].height",
+        "$[].channel.icon.childImages[].path",
+        "$[].channel.icon.childImages[].width",
+        "$[].metadata.galleryCount",
+        "$[].metadata.hasGallery"
+      ],
+      "typeChanged": [
+        {
+          "path": "$[].channel.icon.childImages[]",
+          "from": "object",
+          "to": "unknown"
+        }
+      ],
+      "unchangedCount": 67,
+      "hasDrift": true
+    },
+    "content-post": {
+      "added": [],
+      "removed": [
+        "channel.icon.childImages[].height",
+        "channel.icon.childImages[].path",
+        "channel.icon.childImages[].width",
+        "creator.card",
+        "creator.category",
+        "creator.cover",
+        "creator.defaultChannel",
+        "creator.discoverable",
+        "creator.incomeDisplay",
+        "creator.liveStream",
+        "creator.owner",
+        "creator.subscriberCountDisplay",
+        "creator.subscriptionPlans",
+        "creator.visibility",
+        "galleryAttachments",
+        "galleryAttachments[]",
+        "metadata.galleryCount",
+        "metadata.hasGallery"
+      ],
+      "typeChanged": [
+        {
+          "path": "channel.icon.childImages[]",
+          "from": "object",
+          "to": "unknown"
+        }
+      ],
+      "unchangedCount": 123,
+      "hasDrift": true
+    },
+    "user-self": {
+      "added": [],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 22,
+      "hasDrift": false
+    },
+    "user-subscriptions": {
+      "added": [
+        "$[].plan.allowPromotionCodes",
+        "$[].plan.priceMinor",
+        "$[].plan.priceYearlyMinor"
+      ],
+      "removed": [],
+      "typeChanged": [],
+      "unchangedCount": 26,
+      "hasDrift": true
+    }
+  },
+  "hasDrift": true,
+  "firstCapture": false
+}
