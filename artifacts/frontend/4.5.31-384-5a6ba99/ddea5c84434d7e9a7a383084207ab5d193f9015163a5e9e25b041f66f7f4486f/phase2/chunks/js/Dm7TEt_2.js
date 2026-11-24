@@ -1,0 +1,1 @@
+import{G as e,M as t}from"./DnVq8s8Y.js";function n(n){return e(t,n)}export{n as t};

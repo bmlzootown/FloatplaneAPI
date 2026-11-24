@@ -1,28 +1,28 @@
 {
   "schemaVersion": 2,
-  "observationId": "9bd17ba3da58ea60a631404586a462d83e3d6f607506eeab07908f88d404e4f1",
-  "previousObservationId": "8cb81ec3d78e7025ca3787339bbc744b0d42e4daf8a94cbba40e934cf3cb8963",
-  "buildId": "4.5.26-355-797bc04",
+  "observationId": "84e19898181a64f8e14768dcb39eb5d1ec15f1f9c3a736b157c0e6c76759c32f",
+  "previousObservationId": "ddea5c84434d7e9a7a383084207ab5d193f9015163a5e9e25b041f66f7f4486f",
+  "buildId": "4.6.0-387-40e70f1",
   "layout": "vite-user",
-  "baseUrl": "https://frontend.floatplane.com/user/4.5.26-355-797bc04/",
+  "baseUrl": "https://frontend.floatplane.com/user/4.6.0-387-40e70f1/",
   "homepageUrl": "https://www.floatplane.com/",
   "discoveryMethod": "homepage-html-asset-urls",
-  "observedAt": "2026-10-26T18:01:06.666Z",
+  "observedAt": "2026-11-24T18:00:42.208Z",
   "artifacts": [
     {
-      "path": "js/index-Dxy9c0et.js",
-      "url": "https://frontend.floatplane.com/user/4.5.26-355-797bc04/js/index-Dxy9c0et.js",
-      "sha256": "7bfb66800fd167af7bd5ae8163ff15b9b428ab5cbb4a7b6855f7f6a3eba62606",
-      "bytes": 1828095,
+      "path": "js/index-CR5xN7Ny.js",
+      "url": "https://frontend.floatplane.com/user/4.6.0-387-40e70f1/js/index-CR5xN7Ny.js",
+      "sha256": "fda1814704013c641455f5cb127f186fc6da4abab850a7d8ff412fbd01ddbf19",
+      "bytes": 245899,
       "contentType": "application/javascript"
     },
     {
       "path": "manifest.floatplane.webmanifest",
-      "url": "https://frontend.floatplane.com/user/4.5.26-355-797bc04/manifest.floatplane.webmanifest",
+      "url": "https://frontend.floatplane.com/user/4.6.0-387-40e70f1/manifest.floatplane.webmanifest",
       "sha256": "1e1d685d4e90d1a013ff263615358d9049186525033d4737bb5cdcc4b382b21a",
       "bytes": 996,
       "contentType": "application/manifest+json"
     }
   ],
-  "artifactDir": "artifacts/frontend/4.5.26-355-797bc04/9bd17ba3da58ea60a631404586a462d83e3d6f607506eeab07908f88d404e4f1"
+  "artifactDir": "artifacts/frontend/4.6.0-387-40e70f1/84e19898181a64f8e14768dcb39eb5d1ec15f1f9c3a736b157c0e6c76759c32f"
 }

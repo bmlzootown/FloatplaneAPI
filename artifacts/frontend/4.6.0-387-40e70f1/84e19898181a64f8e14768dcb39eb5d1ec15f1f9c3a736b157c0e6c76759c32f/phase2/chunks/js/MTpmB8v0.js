@@ -1,0 +1,1 @@
+import{s as e}from"./C4rkkk9m.js";var t=()=>e();export{t};

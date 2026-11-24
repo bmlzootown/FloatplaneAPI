@@ -1,0 +1,1 @@
+import{t as e}from"./bgSgC5OP.js";import{l as t}from"./2ELpBc8N.js";import{v as n}from"./Dhy0fDtK.js";var r=e(),i=(e=>n(t(e)))(()=>(0,r.jsx)(`div`,{children:(0,r.jsx)(`h1`,{children:`Creator List Page`})}));export{i as default};

@@ -1,0 +1,1 @@
+import{s as e}from"./B2rQdpxZ.js";var t=()=>e();export{t};
