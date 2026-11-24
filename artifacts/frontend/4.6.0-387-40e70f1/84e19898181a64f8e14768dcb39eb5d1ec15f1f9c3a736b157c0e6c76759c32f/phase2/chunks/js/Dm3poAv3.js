@@ -1,0 +1,1 @@
+import{c as e,t}from"./bgSgC5OP.js";import{t as n}from"./CUAvCVz6.js";var r=e(n(),1),i={feedEmptyMessage:`_feedEmptyMessage_1sgwp_1`},a=t();function o(e){let{children:t,className:n,...o}=e;return(0,a.jsx)(`div`,{...o,className:(0,r.default)(n,i.feedEmptyMessage),children:t})}export{o as t};

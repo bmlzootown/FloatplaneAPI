@@ -1,0 +1,1 @@
+function e(e,t){return t===void 0?e:new File([e],t,{type:e.type})}export{e as t};

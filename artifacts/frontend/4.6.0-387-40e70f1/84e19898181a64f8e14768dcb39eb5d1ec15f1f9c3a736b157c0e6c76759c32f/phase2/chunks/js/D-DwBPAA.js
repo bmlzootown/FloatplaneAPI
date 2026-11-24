@@ -1,0 +1,1 @@
+var e;(function(e){e.Asc=`ASC`,e.Desc=`DESC`})(e||={});export{e as t};

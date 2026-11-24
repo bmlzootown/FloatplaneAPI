@@ -1,0 +1,1 @@
+import{t as e}from"./bgSgC5OP.js";import{n as t}from"./CQwnVUCm.js";var n=e(),r=t((0,n.jsx)(`path`,{d:`M5 20h14v-2H5zM19 9h-4V3H9v6H5l7 7z`}),`Download`);export{r as t};

@@ -1,0 +1,1 @@
+var e=`ddd, mmm d, yyyy h:MM TT`;export{e as t};

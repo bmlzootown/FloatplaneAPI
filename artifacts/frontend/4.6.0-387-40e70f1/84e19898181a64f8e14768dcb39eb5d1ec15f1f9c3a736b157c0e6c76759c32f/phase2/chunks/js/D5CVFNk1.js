@@ -1,0 +1,1 @@
+import{n as e,t}from"./bgSgC5OP.js";import{t as n}from"./1NW7qatc.js";e();var r=t();function i(e){let{image:t,sizeMode:i,sizeTargetWidth:a,sizeTargetHeight:o,...s}=e,c=n.useUrl(t,i,a,o);return(0,r.jsx)(`img`,{...s,src:c})}export{i as t};
